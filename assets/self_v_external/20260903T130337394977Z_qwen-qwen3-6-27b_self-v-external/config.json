@@ -1,0 +1,79 @@
+{
+  "experiment_name": "self_v_external",
+  "model": {
+    "id": "Qwen/Qwen3.6-27B",
+    "revision": "main",
+    "dtype": "bfloat16",
+    "device_map": "cuda"
+  },
+  "lens": {
+    "repo": "neuronpedia/jacobian-lens",
+    "file": "qwen3.6-27b/jlens/Salesforce-wikitext/Qwen3.6-27B_jacobian_lens_n1000.pt",
+    "revision": "main",
+    "resident_jacobians": true
+  },
+  "dataset": {
+    "path": "dataset/metacognition.csv",
+    "selected_item_types": [
+      "calibration",
+      "prospective",
+      "knowledge_boundary"
+    ]
+  },
+  "seed": 42,
+  "readout_top_k": 50,
+  "rank_policy": {
+    "appearance_rank": "raw_rank",
+    "reported_candidate_rank": "raw_rank",
+    "also_record": "word_filtered_rank",
+    "visibility_gate": false,
+    "word_filter": "jlens_meaningful_token_mask"
+  },
+  "candidates": [
+    {
+      "label": "评价",
+      "token_id": 97817,
+      "display_description": "Neuronpedia manual target; visually second 'to evaluate'",
+      "enabled": true
+    }
+  ],
+  "interventions": {
+    "primary": {
+      "mode": "neuronpedia_global",
+      "candidate_token_id": 97817,
+      "layer": 40,
+      "direction_source_selector": "question_mark",
+      "strengths": [
+        0.0,
+        -1.7,
+        -1.8
+      ],
+      "max_injection_fraction": 1.0,
+      "steer_generated": true
+    }
+  },
+  "generation": {
+    "max_choice_tokens": 8,
+    "max_answer_tokens": 48,
+    "temperature": 0,
+    "do_sample": false,
+    "use_cache": false
+  },
+  "pilot": {
+    "item_ids": [
+      "0",
+      "66",
+      "73",
+      "87"
+    ]
+  },
+  "analysis": {
+    "bootstrap_samples": 2000
+  },
+  "interpretation": {
+    "generic_result": "similar presence and causal effect in SELF and OTHER supports a generic evaluator/readout",
+    "self_specific_candidate_result": "stronger and selectively causal effects in SELF support a self-specific evaluator candidate",
+    "maximum_claim": "self-evaluation-selective causal evaluator candidate",
+    "prohibited_claim": "higher-order representation M(P)"
+  }
+}

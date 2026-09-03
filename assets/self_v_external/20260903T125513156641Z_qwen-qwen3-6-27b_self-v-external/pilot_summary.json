@@ -1,0 +1,12 @@
+{
+  "checks": {
+    "expected_condition_rows": true,
+    "both_conditions_per_item": true,
+    "exact_answer_hash_shared": true,
+    "expected_paired_rows": true,
+    "pair_identity_recorded": true,
+    "both_strengths_per_item": true,
+    "errors_empty": true
+  },
+  "passed": true
+}
