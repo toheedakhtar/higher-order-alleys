@@ -113,6 +113,15 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
         or support.get("item_match_requires_positive_targeted_drop") is not True
     ):
         raise ValueError("frozen held-out support-match rule changed")
+    generation = config["generation"]
+    if (
+        int(generation["max_answer_tokens"]) != 256
+        or generation.get("do_sample") is not False
+        or float(generation.get("temperature")) != 0.0
+        or generation.get("enable_thinking") is not False
+        or generation.get("canonical_assistant_turn_terminator") != "<|im_end|>"
+    ):
+        raise ValueError("frozen answer generation or turn-termination contract changed")
     if len(dataset_rows) != int(config["dataset"]["expected_items"]):
         raise ValueError(f"expected 82 factual items, found {len(dataset_rows)}")
     counts: dict[str, int] = {}
@@ -157,17 +166,33 @@ def allocate_discovery_split(
     chosen: list[Mapping[str, Any]] = []
     for item_type, count in config["split"]["discovery_counts"].items():
         pool = [row for row in answer_rows if row["item_type"] == item_type and not row.get("invalid", False)]
-        chosen.extend(_balanced_sample(pool, int(count), rng))
+        try:
+            chosen.extend(_balanced_sample(pool, int(count), rng))
+        except ValueError as exc:
+            raise ValueError(
+                f"cannot allocate {count} discovery {item_type} items from "
+                f"{len(pool)} valid answers"
+            ) from exc
     discovery = sorted(str(row["item_id"]) for row in chosen)
-    all_item_ids = sorted(str(row["item_id"]) for row in answer_rows)
-    heldout = sorted(set(all_item_ids) - set(discovery))
+    valid_item_ids = sorted(
+        str(row["item_id"]) for row in answer_rows if not row.get("invalid", False)
+    )
+    excluded = sorted(
+        str(row["item_id"]) for row in answer_rows if row.get("invalid", False)
+    )
+    heldout = sorted(set(valid_item_ids) - set(discovery))
     if len(discovery) != 16:
         raise ValueError(f"expected 16 discovery items, found {len(discovery)}")
-    if len(heldout) != int(config["split"]["heldout_items"]):
+    maximum_heldout = int(config["split"]["heldout_items"])
+    if len(heldout) > maximum_heldout:
         raise ValueError(
-            f"expected {config['split']['heldout_items']} held-out item assignments, found {len(heldout)}"
+            f"held-out assignments exceed frozen maximum {maximum_heldout}: {len(heldout)}"
         )
-    return {"discovery_item_ids": discovery, "heldout_item_ids": heldout}
+    return {
+        "discovery_item_ids": discovery,
+        "heldout_item_ids": heldout,
+        "excluded_invalid_item_ids": excluded,
+    }
 
 
 def item_support_matched(

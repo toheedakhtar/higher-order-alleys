@@ -50,6 +50,18 @@ digests while at least one layer 32–63 must change. That is enforced directly.
    candidates.
 6. Permit held-out execution only after the post-freeze smoke gate passes.
 
+## Answer-bank compatibility correction
+
+- Greedy answer generation has a frozen 256-token hard cap and still uses
+  `enable_thinking=False`.
+- Before generation, one example from each of the three item families must
+  render with Qwen's closed empty thinking block. Token hashes and suffix IDs
+  are saved in `answer_bank/thinking_mode_verification.json`.
+- Generated answer-content IDs are never rewritten. A valid generated terminal
+  ID is logged, while only the invisible replay delimiter is canonicalized to
+  the chat template's one-token `<|im_end|>` delimiter.
+- An item that reaches the cap without a valid terminator is diagnostic-only
+  and is excluded from both discovery and held-out splits.
+
 The present CPU workspace can unit-test this infrastructure but has
 `torch==2.13.0+cpu`; real model phases are intentionally blocked here.
-

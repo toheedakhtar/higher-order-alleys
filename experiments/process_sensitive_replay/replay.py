@@ -21,6 +21,10 @@ from .gradient_intervention import (
 from .protocol import hash_token_ids
 
 
+DISABLED_THINKING_SUFFIX = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
+CANONICAL_ASSISTANT_TURN_TERMINATOR = "<|im_end|>"
+
+
 def render_chat(
     tokenizer: Any,
     messages: Sequence[Mapping[str, str]],
@@ -56,6 +60,45 @@ def encode_chat(
     rendered = render_chat(tokenizer, messages, add_generation_prompt=add_generation_prompt)
     encoded = encode_rendered(tokenizer, rendered)
     return rendered, [int(value) for value in encoded["input_ids"][0].tolist()]
+
+
+def canonical_assistant_turn_end_ids(tokenizer: Any) -> list[int]:
+    """Resolve the frozen, invisible assistant turn delimiter as exactly one token."""
+    encoded = tokenizer(
+        CANONICAL_ASSISTANT_TURN_TERMINATOR,
+        add_special_tokens=False,
+    )["input_ids"]
+    if encoded and isinstance(encoded[0], list):
+        encoded = encoded[0]
+    token_ids = [int(value) for value in encoded]
+    if len(token_ids) != 1:
+        raise RuntimeError(
+            f"{CANONICAL_ASSISTANT_TURN_TERMINATOR!r} must encode as exactly one token; "
+            f"observed {token_ids}"
+        )
+    return token_ids
+
+
+def verify_thinking_disabled(
+    tokenizer: Any,
+    messages: Sequence[Mapping[str, str]],
+) -> dict[str, Any]:
+    """Fail closed unless Qwen renders the frozen no-thinking generation prefix."""
+    rendered = render_chat(tokenizer, messages, add_generation_prompt=True)
+    if not rendered.endswith(DISABLED_THINKING_SUFFIX):
+        raise RuntimeError(
+            "enable_thinking=False did not render the frozen closed empty thinking block"
+        )
+    rendered_ids = encode_rendered(tokenizer, rendered)["input_ids"][0].tolist()
+    suffix_ids = encode_rendered(tokenizer, DISABLED_THINKING_SUFFIX)["input_ids"][0].tolist()
+    return {
+        "enable_thinking": False,
+        "rendered_suffix": DISABLED_THINKING_SUFFIX,
+        "rendered_suffix_token_ids": [int(value) for value in suffix_ids],
+        "rendered_prompt_token_count": len(rendered_ids),
+        "rendered_prompt_token_hash": hash_token_ids(rendered_ids),
+        "closed_empty_thinking_block": True,
+    }
 
 
 def eos_token_ids(tokenizer: Any, model: Any | None = None) -> set[int]:

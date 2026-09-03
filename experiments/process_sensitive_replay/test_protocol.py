@@ -39,6 +39,12 @@ class ProtocolTests(unittest.TestCase):
         result = validate_config(self.config, rows)
         self.assertEqual(result["item_count"], 82)
         self.assertEqual(result["item_type_counts"]["calibration"], 66)
+        self.assertEqual(self.config["generation"]["max_answer_tokens"], 256)
+        self.assertIs(self.config["generation"]["enable_thinking"], False)
+        self.assertEqual(
+            self.config["generation"]["canonical_assistant_turn_terminator"],
+            "<|im_end|>",
+        )
 
     def test_item_support_match_uses_absolute_target_and_requires_positive_drop(self) -> None:
         self.assertTrue(item_support_matched(1.0, 1.5))
@@ -86,8 +92,10 @@ class ProtocolTests(unittest.TestCase):
         self.assertTrue(all(values == {False, True} for values in correctness.values()))
         rows[0]["invalid"] = True
         split_with_invalid = allocate_discovery_split(rows, self.config)
-        self.assertEqual(len(split_with_invalid["heldout_item_ids"]), 66)
+        self.assertEqual(len(split_with_invalid["heldout_item_ids"]), 65)
         self.assertNotIn("0", split_with_invalid["discovery_item_ids"])
+        self.assertNotIn("0", split_with_invalid["heldout_item_ids"])
+        self.assertEqual(split_with_invalid["excluded_invalid_item_ids"], ["0"])
 
 
 class DiscoveryTests(unittest.TestCase):

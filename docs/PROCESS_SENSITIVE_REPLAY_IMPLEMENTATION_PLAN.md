@@ -75,7 +75,11 @@ Every condition within a meta branch will have identical question, answer, turn 
 
 ## Tokenization and replay contract
 
-Step 0 will save both the generated token IDs and decoded text. The full chat-template rendering will then be reconstructed and checked to ensure the answer content re-tokenizes to the same IDs.
+Step 0 will use greedy decoding with `enable_thinking=False` and a hard maximum of 256 answer tokens. Before generating the answer bank, the runner will verify the rendered generation prefix on exactly three examples: one calibration, one prospective, and one knowledge-boundary item. Each must end in Qwen's closed empty thinking block (`<think>\n\n</think>\n\n`), and the rendered-token hashes and suffix IDs will be written to `answer_bank/thinking_mode_verification.json`. Failure is fail-closed.
+
+The answer bank will save both the generated token IDs and decoded text. Generated answer-content token IDs are immutable. A model-produced valid terminal token is logged as the original terminal ID, but the invisible assistant-turn delimiter in the canonical replay transcript is normalized to the single `<|im_end|>` token emitted by the completed chat template. The original and canonical terminal IDs, whether they were already identical, and their hashes remain logged. This normalization never changes answer text or answer-content IDs.
+
+The full chat-template rendering will then be reconstructed and checked to ensure the answer content re-tokenizes to the same IDs and the canonical post-answer transcript matches the rendered conversation. If generation reaches the 256-token cap without any configured valid turn terminator, the truncated content is retained only in raw diagnostics: the item is marked invalid, receives no canonical turn terminator, and is excluded from both discovery and held-out evaluation rather than being treated as canonical X.
 
 If decoding and re-tokenization are not stable:
 
@@ -222,7 +226,7 @@ A deterministic seed-42 allocator will then select 16 discovery items:
 
 Within each family, it will include both factually correct and incorrect answers whenever available. Exact IDs and answer hashes will be frozen in `split_manifest.json` and the run-local resolved config.
 
-The remaining 66 items become held-out.
+All remaining valid items become held-out, up to 66 when every answer is valid. Any item invalidated during answer-bank construction is listed separately in `excluded_invalid_item_ids` and belongs to neither split.
 
 The discovery loader will reject held-out IDs. The held-out runner will refuse to start without a frozen candidate/strength file whose hashes match the dataset, answer bank, model, lens, split, and code configuration.
 
@@ -413,7 +417,9 @@ validate
     static schemas, dataset, layers, split algorithm
 
 answer_bank
-    generate X once; freeze hashes and split
+    verify no-thinking rendering on three examples; generate X once with a
+    256-token hard cap; canonicalize only the invisible turn terminator;
+    freeze content/transcript hashes and valid-item split
 
 pre_discovery_smoke
     2–4 discovery items; replay/token parity, hybrid-cache cloning,
@@ -485,6 +491,10 @@ CPU tests will cover:
 
 - autoregressive predictor-position indexing;
 - stable answer token reconstruction;
+- exact preservation of generated answer-content IDs while canonicalizing only the invisible assistant-turn terminator;
+- logging of original and canonical terminal IDs;
+- invalidation and split exclusion when no valid termination occurs by the 256-token cap;
+- `enable_thinking=False` rendering with a closed empty thinking block on one example from each item family;
 - targeted intervention sign using finite differences;
 - exact targeted/random norm matching;
 - random-gradient orthogonality;

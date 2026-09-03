@@ -25,6 +25,7 @@ from .protocol import (
     allocate_discovery_split,
     assert_phase_prerequisites,
     canonical_json,
+    direct_factual_question,
     load_config,
     load_dataset,
     gate_path,
@@ -33,7 +34,7 @@ from .protocol import (
     validate_config,
     write_gate,
 )
-from .replay import QwenReplayAdapter
+from .replay import QwenReplayAdapter, verify_thinking_disabled
 from .smoke import run_smoke_item, summarize_smoke
 
 
@@ -345,6 +346,34 @@ def run_answer_bank_phase(
     )
     write_manifest(run_dir, phase=phase, status="running", config=config, hashes=hashes, runtime=runtime)
     rows = load_dataset(REPO_ROOT / config["dataset"]["path"], config["dataset"]["item_types"])
+    thinking_examples = []
+    for item_type in config["dataset"]["item_types"]:
+        row = next(candidate for candidate in rows if candidate["item_type"] == item_type)
+        check = verify_thinking_disabled(
+            tokenizer,
+            [{"role": "user", "content": direct_factual_question(row)}],
+        )
+        thinking_examples.append({
+            "item_id": str(row["item_id"]),
+            "item_type": str(row["item_type"]),
+            "question_token_hash": sha256_json(
+                tokenizer(
+                    direct_factual_question(row), add_special_tokens=False
+                )["input_ids"]
+            ),
+            **check,
+        })
+    thinking_path = run_dir / phase / "thinking_mode_verification.json"
+    thinking_path.write_text(
+        json.dumps({"passed": True, "examples": thinking_examples}, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    hashes["thinking_mode_verification"] = sha256_file(thinking_path)
+    append_jsonl(run_dir / "events.jsonl", {
+        "timestamp": utc_now(), "event_type": "thinking_mode_verified",
+        "item_ids": [example["item_id"] for example in thinking_examples],
+        "artifact_sha256": hashes["thinking_mode_verification"],
+    })
     records = []
     for row in rows:
         record = discover_answer(
@@ -364,6 +393,7 @@ def run_answer_bank_phase(
         "seed": config["split"]["seed"],
         "answer_bank_sha256": sha256_file(answer_bank_path),
         "dataset_sha256": hashes["dataset"],
+        "thinking_mode_verification_sha256": hashes["thinking_mode_verification"],
     }
     split_path.write_text(json.dumps(split_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     hashes.update({
@@ -375,6 +405,8 @@ def run_answer_bank_phase(
         "invalid_answers": sum(bool(record["invalid"]) for record in records),
         "discovery_items": len(split["discovery_item_ids"]),
         "heldout_items": len(split["heldout_item_ids"]),
+        "excluded_invalid_items": len(split["excluded_invalid_item_ids"]),
+        "thinking_mode_examples_verified": len(thinking_examples),
     }
     write_gate(run_dir, GateStatus(
         phase=phase, status="passed", protocol_hash=combined_protocol_hash(hashes),
@@ -386,8 +418,10 @@ def run_answer_bank_phase(
 def _load_campaign_inputs(run_dir: Path, hashes: dict[str, str]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     answer_path = run_dir / "answer_bank.jsonl"
     split_path = run_dir / "split_manifest.json"
+    thinking_path = run_dir / "answer_bank" / "thinking_mode_verification.json"
     hashes["answer_bank"] = sha256_file(answer_path)
     hashes["split_manifest"] = sha256_file(split_path)
+    hashes["thinking_mode_verification"] = sha256_file(thinking_path)
     return read_jsonl(answer_path), json.loads(split_path.read_text(encoding="utf-8"))
 
 

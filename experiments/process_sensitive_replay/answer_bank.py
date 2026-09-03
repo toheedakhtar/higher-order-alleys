@@ -12,7 +12,12 @@ from experiments.higher_v_readout_global.protocol import (
 )
 
 from .protocol import direct_factual_question, hash_token_ids
-from .replay import QwenReplayAdapter, encode_chat, eos_token_ids
+from .replay import (
+    QwenReplayAdapter,
+    canonical_assistant_turn_end_ids,
+    encode_chat,
+    eos_token_ids,
+)
 
 
 def discover_answer(
@@ -35,6 +40,9 @@ def discover_answer(
     if logits is None:
         raise AssertionError("factual question rendered to no tokens")
     eos = eos_token_ids(tokenizer, adapter.hf_model)
+    canonical_terminal_ids = canonical_assistant_turn_end_ids(tokenizer)
+    if canonical_terminal_ids[0] not in eos:
+        raise RuntimeError("canonical <|im_end|> token is not configured as a valid model terminator")
     generated: list[int] = []
     token_logprobs: list[float] = []
     terminated = False
@@ -51,9 +59,9 @@ def discover_answer(
             cache,
             expected_position=adapter.cache_length(cache),
         )
-    content_ids = list(generated)
-    while content_ids and content_ids[-1] in eos:
-        content_ids.pop()
+    original_terminal_ids = [generated[-1]] if terminated else []
+    content_ids = list(generated[:-1] if terminated else generated)
+    canonical_turn_end_ids = canonical_terminal_ids if terminated else []
     answer = tokenizer.decode(
         content_ids,
         skip_special_tokens=True,
@@ -64,7 +72,9 @@ def discover_answer(
         canonical_ids = canonical_ids[0]
     canonical_ids = [int(value) for value in canonical_ids]
     stable = canonical_ids == content_ids
-    post_answer_ids = [*prefix_ids, *generated]
+    # Preserve answer-content IDs exactly. Only the invisible assistant-turn
+    # delimiter is normalized to the chat template's canonical <|im_end|>.
+    post_answer_ids = [*prefix_ids, *content_ids, *canonical_turn_end_ids]
     _, rendered_turn_ids = encode_chat(
         tokenizer,
         [
@@ -94,7 +104,7 @@ def discover_answer(
         "factual_scoring": scoring,
         "invalid": invalid,
         "invalid_reasons": {
-            "missing_eos": not terminated,
+            "reached_token_cap_without_valid_turn_termination": not terminated,
             "empty_answer": not content_ids,
             "decode_retokenize_unstable": not stable,
             "chat_reconstruction_unstable": not rendered_prefix_stable,
@@ -103,7 +113,11 @@ def discover_answer(
         "question_rendered": rendered,
         "question_prefix_token_ids": prefix_ids,
         "answer_token_ids": content_ids,
-        "turn_end_token_ids": generated[len(content_ids) :],
+        "turn_end_token_ids": canonical_turn_end_ids,
+        "generated_turn_end_token_ids": original_terminal_ids,
+        "canonical_turn_end_token_ids": canonical_turn_end_ids,
+        "generated_turn_end_token_hash": hash_token_ids(original_terminal_ids),
+        "canonical_turn_end_token_hash": hash_token_ids(canonical_turn_end_ids),
         "post_answer_token_ids": post_answer_ids,
         "question_token_hash": hash_token_ids(prefix_ids),
         "answer_token_hash": hash_token_ids(content_ids),
@@ -114,6 +128,10 @@ def discover_answer(
             "all_generated_token_ids": generated,
             "token_logprobs": token_logprobs,
             "terminated_on_eos": terminated,
+            "terminated_on_valid_turn_end": terminated,
+            "original_terminal_token_ids": original_terminal_ids,
+            "canonical_terminal_token_ids": canonical_turn_end_ids,
+            "terminal_was_already_canonical": original_terminal_ids == canonical_turn_end_ids,
             "max_answer_tokens": int(max_answer_tokens),
         },
     }

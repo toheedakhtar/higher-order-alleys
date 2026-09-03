@@ -32,20 +32,15 @@ start when CUDA is unavailable, before loading or downloading Qwen or J-Lens.
 
 ## CUDA-host sequence
 
-Use a new campaign directory and the same CUDA host used for the prior runs:
+The original `assets/psr` campaign is retained as failed diagnostics. After
+syncing the answer-bank compatibility correction, use the fresh
+`assets/psr-v2` campaign directory and the same CUDA host used for the prior
+runs:
 
-```powershell
-python -m experiments.process_sensitive_replay.runner `
-  --phase validate `
-  --run-dir <CAMPAIGN_DIR>
-
-python -m experiments.process_sensitive_replay.runner `
-  --phase answer_bank `
-  --run-dir <CAMPAIGN_DIR>
-
-python -m experiments.process_sensitive_replay.runner `
-  --phase pre_discovery_smoke `
-  --run-dir <CAMPAIGN_DIR>
+```bash
+python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v2
+python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v2
+python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v2
 ```
 
 The pre-discovery smoke validates replay/token parity, hybrid state cloning,
@@ -56,10 +51,8 @@ It does not select or require a frozen beta.
 After the separately implemented discovery/freeze phase writes a hash-gated
 `frozen_protocol.json` and passing `freeze` gate, run:
 
-```powershell
-python -m experiments.process_sensitive_replay.runner `
-  --phase post_freeze_smoke `
-  --run-dir <CAMPAIGN_DIR>
+```bash
+python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v2
 ```
 
 The post-freeze smoke reruns every critical check and additionally enforces
@@ -69,4 +62,3 @@ phase from starting.
 
 There is intentionally no override for failed, skipped, missing, or stale
 gates.
-

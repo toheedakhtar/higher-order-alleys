@@ -87,14 +87,15 @@
     "generic_evaluator_token_ids": [97817, 99973]
   },
   "generation": {
-    "max_answer_tokens": 48,
+    "max_answer_tokens": 256,
     "max_choice_tokens": 8,
     "do_sample": false,
-    "temperature": 0
+    "temperature": 0,
+    "enable_thinking": false,
+    "canonical_assistant_turn_terminator": "<|im_end|>"
   },
   "interpretation": {
     "maximum_claim": "evidence for a process-property / process-sensitive representation; an M(P)-like candidate",
     "prohibited_claim": "proven higher-order representation without candidate-to-judgment/control causal mediation"
   }
 }
-
