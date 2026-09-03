@@ -47,7 +47,8 @@ TRIAL_FIELDS = (
 )
 
 PAIRED_FIELDS = (
-    "item_id", "item_type", "domain", "difficulty", "labels", "factual_answer",
+    "item_id", "item_type", "domain", "difficulty", "labels", "candidate_token_id",
+    "candidate_layer", "factual_answer",
     "factual_answer_sha256", "same_question_and_answer", "requested_strength",
     "effective_strength_self", "effective_strength_other", "candidate_score_self",
     "candidate_rank_self", "candidate_word_filtered_rank_self",
@@ -177,10 +178,12 @@ def validate_config(
         )
     primary = config["interventions"]["primary"]
     enabled = [item for item in config["candidates"] if item.get("enabled", True)]
-    if len(enabled) != 1 or int(enabled[0]["token_id"]) != 97817:
-        raise ValueError("the paired experiment requires only candidate token 97817")
-    if int(primary["candidate_token_id"]) != 97817 or int(primary["layer"]) != 40:
-        raise ValueError("the frozen candidate must be token 97817 at layer 40")
+    candidate_ids = {int(item["token_id"]) for item in enabled}
+    if candidate_ids != {97817, 99973}:
+        raise ValueError("candidate registry must contain tokens 97817 and 99973")
+    selected_candidate = int(primary["candidate_token_id"])
+    if selected_candidate not in candidate_ids or int(primary["layer"]) != 40:
+        raise ValueError("the frozen candidate must be token 97817 or 99973 at layer 40")
     if [float(value) for value in primary["strengths"]] != [0.0, -1.7, -1.8]:
         raise ValueError("primary strengths must be [0, -1.7, -1.8]")
     if config["rank_policy"].get("visibility_gate") is not False:
@@ -193,17 +196,17 @@ def validate_config(
         "source_sample_count": len(rows), "paired_item_count": len(selected),
         "condition_count": len(selected) * 2, "counts": counts,
         "excluded_item_types": sorted({row["item_type"] for row in rows} - set(counts)),
-        "candidate_token_id": 97817, "candidate_layer": 40,
+        "candidate_token_id": selected_candidate, "candidate_layer": 40,
         "candidate_visibility_gate": False,
         "strengths": primary["strengths"],
         "pairing": "same factual question and exact generated answer; final your/their swap only",
     }
 
 
-def make_run_id(model_id: str) -> str:
+def make_run_id(model_id: str, candidate_token_id: int) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     slug = re.sub(r"[^A-Za-z0-9]+", "-", model_id).strip("-").lower()
-    return f"{stamp}_{slug}_self-v-external"
+    return f"{stamp}_{slug}_token{candidate_token_id}_self-v-external"
 
 
 def answer_sha256(answer: str) -> str:
@@ -355,6 +358,8 @@ def paired_row(
         "domain": self_trial.item.get("domain"),
         "difficulty": self_trial.item.get("difficulty"),
         "labels": "/".join(self_trial.labels),
+        "candidate_token_id": candidate.token_id,
+        "candidate_layer": candidate.layer,
         "factual_answer": self_trial.factual_answer,
         "factual_answer_sha256": answer_sha256(self_trial.factual_answer or ""),
         "same_question_and_answer": same_prefix,
@@ -553,15 +558,18 @@ def build_manifest(
     return manifest
 
 
-def write_run_readme(run_dir: Path, run_id: str, status: str) -> None:
+def write_run_readme(
+    run_dir: Path, run_id: str, status: str, candidate_token_id: int
+) -> None:
     (run_dir / "README_run.md").write_text(
         f"""# Matched SELF-versus-OTHER run `{run_id}`
 
 Status: {status}
 
 Each factual answer is generated once and reused exactly in SELF and OTHER.
-The evaluation prompts differ only in `your` versus `their`. Token 97817 is
-measured and globally steered at layer 40 without a rank/visibility gate.
+The evaluation prompts differ only in `your` versus `their`. Candidate token
+`{candidate_token_id}` is measured and globally steered at layer 40 without a
+rank/visibility gate.
 
 The maximum supported claim is a self-evaluation-selective causal evaluator
 candidate. This experiment cannot establish a higher-order representation M(P).
@@ -585,6 +593,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-gate-requirement", action="store_true")
     parser.add_argument("--resume-run", type=Path)
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--candidate-token-id", type=int, choices=(97817, 99973))
     return parser
 
 
@@ -596,6 +605,10 @@ def configure_args(args: argparse.Namespace, config: dict[str, Any]) -> None:
     args.device_map = args.device_map or model.get("device_map", "cuda")
     args.seed = int(args.seed if args.seed is not None else config.get("seed", 42))
     config["seed"] = args.seed
+    if args.candidate_token_id is not None:
+        config["interventions"]["primary"]["candidate_token_id"] = int(
+            args.candidate_token_id
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -638,7 +651,9 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError("resume configuration or phase mismatch")
         run_id = old_manifest["run_id"]
     else:
-        run_id = make_run_id(args.model)
+        run_id = make_run_id(
+            args.model, int(config["interventions"]["primary"]["candidate_token_id"])
+        )
         run_dir = base_runner.prepare_run_dir(args.output_root.resolve(), run_id)
         (run_dir / "config.json").write_text(
             json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
@@ -656,7 +671,10 @@ def main(argv: list[str] | None = None) -> int:
         manifest["experiment_started_at"] = old_manifest["experiment_started_at"]
         manifest["resume_count"] = int(old_manifest.get("resume_count", 0)) + 1
     base_runner.write_manifest(run_dir, manifest)
-    write_run_readme(run_dir, run_id, manifest["status"])
+    selected_candidate_id = int(
+        config["interventions"]["primary"]["candidate_token_id"]
+    )
+    write_run_readme(run_dir, run_id, manifest["status"], selected_candidate_id)
 
     try:
         transformers, jlens = base_runner.require_runtime()
@@ -702,7 +720,7 @@ def main(argv: list[str] | None = None) -> int:
             manifest["experiment_started_at"] = old_manifest["experiment_started_at"]
             manifest["resume_count"] = int(old_manifest.get("resume_count", 0)) + 1
         base_runner.write_manifest(run_dir, manifest)
-        write_run_readme(run_dir, run_id, manifest["status"])
+        write_run_readme(run_dir, run_id, manifest["status"], selected_candidate_id)
         recorder.event("model_loaded", runtime=manifest["runtime"], lens=manifest["lens"])
 
         finished = base_runner.completed_items(run_dir / "events.jsonl")
@@ -736,7 +754,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest["experiment_ended_at"] = base_runner.utc_now()
         manifest["plot_status"] = plot_status
         base_runner.write_manifest(run_dir, manifest)
-        write_run_readme(run_dir, run_id, status)
+        write_run_readme(run_dir, run_id, status, selected_candidate_id)
         recorder.event("run_finished", status=status, plot_status=plot_status)
         recorder.logger.info("run=%s status=%s path=%s", run_id, status, run_dir)
         return 0 if status == "completed" else 2
@@ -746,7 +764,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest["logged_error_count"] = base_runner.record_count(run_dir / "errors.jsonl")
         manifest["experiment_ended_at"] = base_runner.utc_now()
         base_runner.write_manifest(run_dir, manifest)
-        write_run_readme(run_dir, run_id, "failed")
+        write_run_readme(run_dir, run_id, "failed", selected_candidate_id)
         return 1
     finally:
         recorder.close()

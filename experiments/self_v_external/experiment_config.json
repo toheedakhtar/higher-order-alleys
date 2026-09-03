@@ -35,6 +35,12 @@
       "token_id": 97817,
       "display_description": "Neuronpedia manual target; visually second 'to evaluate'",
       "enabled": true
+    },
+    {
+      "label": "评估",
+      "token_id": 99973,
+      "display_description": "alternate candidate; visually first 'to evaluate'",
+      "enabled": true
     }
   ],
   "interventions": {

@@ -17,6 +17,7 @@ import pandas as pd
 
 REQUIRED_COLUMNS = {
     "item_id", "requested_strength", "same_question_and_answer",
+    "candidate_token_id", "candidate_layer",
     "candidate_score_self", "candidate_rank_self", "candidate_score_other",
     "candidate_rank_other", "self_minus_other_candidate_score",
     "steering_delta_self", "steering_delta_other",
@@ -56,6 +57,7 @@ def validate_pairs(frame: pd.DataFrame) -> pd.DataFrame:
         "candidate_score_other", "candidate_rank_other",
         "self_minus_other_candidate_score", "steering_delta_self",
         "steering_delta_other", "self_minus_other_steering_effect",
+        "candidate_token_id", "candidate_layer",
     ]
     for column in numeric:
         frame[column] = pd.to_numeric(frame[column], errors="raise")
@@ -197,6 +199,12 @@ def summary_table(frame: pd.DataFrame, bootstrap_samples: int) -> pd.DataFrame:
 
 def write_results(run_dir: Path, frame: pd.DataFrame, summary: pd.DataFrame) -> None:
     unique = frame.drop_duplicates("item_id")
+    candidate_ids = unique["candidate_token_id"].unique()
+    candidate_layers = unique["candidate_layer"].unique()
+    if len(candidate_ids) != 1 or len(candidate_layers) != 1:
+        raise ValueError("one frozen candidate token/layer is required per run")
+    candidate_id = int(candidate_ids[0])
+    candidate_layer = int(candidate_layers[0])
     lines = [
         f"# Paired SELF-versus-OTHER results: `{run_dir.name}`",
         "",
@@ -205,7 +213,7 @@ def write_results(run_dir: Path, frame: pd.DataFrame, summary: pd.DataFrame) -> 
         f"- Paired factual items: {unique['item_id'].nunique()}",
         f"- Paired item-strength rows: {len(frame)}",
         "- Exact question/answer prefix shared in every pair: yes",
-        "- Candidate: vocabulary token 97817 at layer 40, measured without a rank gate",
+        f"- Candidate: vocabulary token {candidate_id} at layer {candidate_layer}, measured without a rank gate",
         "- Steering delta: change in the correct-oriented label-sequence log-probability margin",
         "",
         "## Candidate presence",

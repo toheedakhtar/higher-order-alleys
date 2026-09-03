@@ -36,6 +36,14 @@ class SelfVersusExternalTests(unittest.TestCase):
         self.assertEqual(report["excluded_item_types"], ["error_detection"])
         self.assertFalse(report["candidate_visibility_gate"])
 
+    def test_alternate_candidate_cli_selects_token_99973(self):
+        config = runner.load_config(runner.DEFAULT_CONFIG)
+        args = runner.build_parser().parse_args(["--candidate-token-id", "99973"])
+        runner.configure_args(args, config)
+        report = runner.validate_config(config, self.rows)
+        self.assertEqual(report["candidate_token_id"], 99973)
+        self.assertEqual(config["interventions"]["primary"]["candidate_token_id"], 99973)
+
     def test_pair_differs_only_in_your_their(self):
         row = next(item for item in self.rows if item["item_type"] == "calibration")
         paired = protocol.build_paired_protocol(row)
@@ -136,6 +144,7 @@ class SelfVersusExternalTests(unittest.TestCase):
                 rows.append({
                     "item_id": str(item_id), "item_type": "calibration",
                     "domain": "test", "difficulty": 1,
+                    "candidate_token_id": 97817, "candidate_layer": 40,
                     "same_question_and_answer": True,
                     "requested_strength": strength,
                     "candidate_score_self": 10.0 + item_id,

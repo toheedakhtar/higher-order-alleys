@@ -1,9 +1,9 @@
 # Matched SELF-versus-OTHER J-Lens experiment
 
-This experiment tests whether vocabulary token `97817` (the selected
-"to evaluate" direction) is more present and more causally effective when the
-model evaluates its own prior answer than when the same answer is attributed
-to another party.
+This experiment tests whether a selected "to evaluate" vocabulary direction is
+more present and more causally effective when the model evaluates its own prior
+answer than when the same answer is attributed to another party. Token `97817`
+is the default; token `99973` is the alternate candidate.
 
 ## Paired protocol
 
@@ -40,7 +40,8 @@ conditions.
 
 ## Measurement and intervention
 
-- Candidate: vocabulary token `97817` (`评价`)
+- Candidate: vocabulary token `97817` (`评价`) by default, or alternate token
+  `99973` (`评估`) selected with `--candidate-token-id 99973`
 - Layer: 40
 - Readout position: the `?` in the final evaluation question
 - Full saved readout: top 50 J-space tokens at every available lens layer
@@ -76,6 +77,15 @@ Run the four-item pilot:
 uv run python -m experiments.self_v_external.runner --phase pilot
 ```
 
+Run a separate pilot with the alternate "to evaluate" token:
+
+```powershell
+uv run python -m experiments.self_v_external.runner `
+  --phase pilot `
+  --candidate-token-id 99973 `
+  --output-root assets/self_v_external_token99973
+```
+
 Run all 82 paired items after the pilot passes:
 
 ```powershell
@@ -83,6 +93,19 @@ uv run python -m experiments.self_v_external.runner `
   --phase full `
   --pilot-run experiments/self_v_external/results/PILOT_RUN_ID
 ```
+
+For token `99973`, pass the same selection to both pilot and full runs:
+
+```powershell
+uv run python -m experiments.self_v_external.runner `
+  --phase full `
+  --candidate-token-id 99973 `
+  --pilot-run assets/self_v_external_token99973/PILOT_RUN_ID `
+  --output-root assets/self_v_external_token99973
+```
+
+Gate validation rejects a pilot produced with a different candidate token, so
+the two candidate experiments cannot be accidentally mixed.
 
 Use a different output parent directory:
 
@@ -118,6 +141,8 @@ uv run python -m unittest experiments.self_v_external.test_self_v_external
 
 `paired_results.csv` has one row per item and nonzero strength, including:
 
+- `candidate_token_id`
+- `candidate_layer`
 - `candidate_score_self`
 - `candidate_rank_self`
 - `candidate_score_other`
