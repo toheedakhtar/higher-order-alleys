@@ -359,9 +359,47 @@ For every token/layer on discovery, calculate:
 - agreement between targeted-strong and support-matched-alternative after accounting for their realized support drops;
 - item-level sign consistency.
 
-Candidates will be oriented using the discovery slope sign. An eligible candidate must move in the same oriented direction under targeted-strong and support-matched-alternative, while the norm-matched random response is smaller or less structured. Candidates whose targeted and support-matched responses strongly diverge after conditioning on support drop will be excluded as perturbation-mechanism-specific traces.
+The executable definition is frozen as follows. For each item, scores and
+support drops for clean, targeted-weak, and targeted-strong are centered within
+item. Their pooled through-origin slope defines the item-centered support
+relationship; its sign orients that token/layer candidate. Targeted,
+alternative, targeted-minus-random, and targeted-preserved-minus-reset effects
+are then multiplied by this orientation.
 
-The remaining candidates will be ranked by a frozen equal-weight rank aggregation of the metrics above and deduplicated by direction-vector cosine similarity. Up to three token/layer candidates will be frozen.
+Support-adjusted agreement is computed by fitting one pooled through-origin
+slope from realized targeted/alternative support drops to their respective
+candidate effects. The agreement metric is the negative mean absolute paired
+difference between the targeted and alternative residuals. The corresponding
+divergence ratio divides that mismatch by the sum of the mean absolute targeted
+and alternative effects.
+
+An eligible candidate must have score variance greater than `1e-8`, a nonzero
+support slope, positive oriented targeted and alternative mean effects, a
+positive oriented targeted-preserved-minus-reset effect, and either a positive
+oriented targeted-minus-random effect or greater structured than random
+item-sign consistency. Its support-adjusted divergence ratio must be no greater
+than `1.0`. These comparisons operationalize the already-frozen requirements
+that the two structured interventions move together, random be smaller or less
+structured, reset approach clean, and strongly mechanism-specific divergence
+be excluded.
+
+Eligible candidates receive deterministic descending ordinal ranks for seven
+metrics: absolute item-centered support slope, oriented targeted effect,
+oriented alternative effect, oriented targeted-minus-random,
+oriented targeted-preserved-minus-reset, support-adjusted agreement, and
+structured item-sign consistency. The unweighted mean of those seven ranks is
+the aggregate rank; exact ties retain ascending flattened layer/token order.
+Ranked candidates are greedily deduplicated using an absolute effective
+direction cosine ceiling of `0.9`, where the saved effective direction is
+`normalize(J_l.T @ lm_head.weight[token_id])`. Up to the first three surviving
+token/layer candidates are frozen, including their orientation, vector, tensor
+hash, and file hash.
+
+All full-vocabulary scores for both meta branches are stored in float16 with
+finite-value validation in `discovery_vocab_scores.pt`; ranking converts the
+frozen confidence-branch tensor back to float32. The exact score tensor,
+support-drop matrix, eligibility mask, metric tensors, and complete ranked
+index are saved, so selection can be reconstructed without held-out data.
 
 Semantic translation is annotation only and cannot affect ranking.
 

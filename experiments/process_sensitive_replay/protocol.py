@@ -140,6 +140,24 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
         "require_exact_token_hash_parity": True,
     }:
         raise ValueError("frozen suffix-only Turn-3 replay contract changed")
+    candidate_selection = config["candidate_selection"]
+    if candidate_selection != {
+        "primary_branch": "confidence",
+        "max_candidates": 3,
+        "nontrivial_variance_epsilon": 1e-8,
+        "max_support_adjusted_divergence_ratio": 1.0,
+        "dedup_max_abs_direction_cosine": 0.9,
+        "rank_metrics": [
+            "item_centered_support_slope",
+            "targeted_strong_effect",
+            "support_matched_alternative_effect",
+            "targeted_minus_random",
+            "targeted_preserved_minus_reset",
+            "support_adjusted_agreement",
+            "item_sign_consistency",
+        ],
+    }:
+        raise ValueError("frozen candidate-selection contract changed")
     if len(dataset_rows) != int(config["dataset"]["expected_items"]):
         raise ValueError(f"expected 82 factual items, found {len(dataset_rows)}")
     counts: dict[str, int] = {}
@@ -280,6 +298,75 @@ def support_match_summary(
         "median_drop_matched": median_drop_matched,
         "median_mismatch_matched": median_mismatch_matched,
         "item_fraction_matched": fraction_matched,
+    }
+
+
+def validate_frozen_protocol(
+    frozen: Mapping[str, Any],
+    config: Mapping[str, Any],
+    split: Mapping[str, Any],
+    source_hashes: Mapping[str, str],
+) -> dict[str, Any]:
+    """Validate the immutable discovery-to-post-freeze handoff."""
+    if int(frozen.get("schema_version", 0)) != 1:
+        raise ValueError("unsupported frozen protocol schema")
+    if frozen.get("experiment_name") != "process_sensitive_replay":
+        raise ValueError("frozen protocol experiment changed")
+    discovery_ids = [str(value) for value in frozen.get("discovery_item_ids", ())]
+    expected_discovery = [str(value) for value in split["discovery_item_ids"]]
+    if discovery_ids != expected_discovery or len(discovery_ids) != 16:
+        raise ValueError("frozen protocol discovery split changed")
+    heldout = {str(value) for value in split["heldout_item_ids"]}
+    if set(discovery_ids) & heldout:
+        raise ValueError("frozen protocol leaks held-out IDs into discovery")
+    frozen_hashes = frozen.get("source_hashes", {})
+    for name, expected in source_hashes.items():
+        if frozen_hashes.get(name) != expected:
+            raise ValueError(f"frozen protocol has stale or missing {name} hash")
+
+    weak = float(frozen["weak_alpha"])
+    strong = float(frozen["strong_alpha"])
+    beta = float(frozen["beta"])
+    alpha_grid = [float(value) for value in config["strengths"]["alpha_grid"]]
+    beta_grid = [float(value) for value in config["strengths"]["beta_grid"]]
+    if weak not in alpha_grid or strong not in alpha_grid or weak >= strong:
+        raise ValueError("frozen alpha strengths violate the discovery grid")
+    if beta not in beta_grid:
+        raise ValueError("frozen beta violates the discovery grid")
+    if frozen.get("candidate_selection") != config["candidate_selection"]:
+        raise ValueError("frozen candidate-selection rule changed")
+    if frozen.get("support_matching") != config["support_matching"]:
+        raise ValueError("frozen support-matching rule changed")
+    if frozen.get("conditions") != config["conditions"]:
+        raise ValueError("frozen conditions changed")
+    if frozen.get("meta_branches") != config["meta_branches"]:
+        raise ValueError("frozen meta prompts changed")
+
+    candidates = list(frozen.get("candidates", ()))
+    maximum = int(config["candidate_selection"]["max_candidates"])
+    if not 1 <= len(candidates) <= maximum:
+        raise ValueError("frozen protocol must contain one to three candidates")
+    seen: set[tuple[int, int]] = set()
+    for candidate in candidates:
+        identity = (int(candidate["token_id"]), int(candidate["layer"]))
+        if identity in seen:
+            raise ValueError("frozen protocol contains duplicate candidate identities")
+        seen.add(identity)
+        if identity[1] not in [int(value) for value in config["layers"]["readout"]]:
+            raise ValueError("frozen candidate layer is outside the readout layers")
+        if int(candidate["orientation"]) not in {-1, 1}:
+            raise ValueError("frozen candidate orientation must be -1 or +1")
+        if not candidate.get("direction_sha256") or not candidate.get("direction_file_sha256"):
+            raise ValueError("frozen candidate direction hashes are missing")
+    expected_token_ids = sorted({token_id for token_id, _layer in seen})
+    if [int(value) for value in frozen.get("candidate_token_ids", ())] != expected_token_ids:
+        raise ValueError("frozen candidate token ID index is inconsistent")
+    return {
+        "discovery_items": len(discovery_ids),
+        "candidate_count": len(candidates),
+        "weak_alpha": weak,
+        "strong_alpha": strong,
+        "beta": beta,
     }
 
 

@@ -100,6 +100,22 @@
     "top_k": 100,
     "generic_evaluator_token_ids": [97817, 99973]
   },
+  "candidate_selection": {
+    "primary_branch": "confidence",
+    "max_candidates": 3,
+    "nontrivial_variance_epsilon": 1e-8,
+    "max_support_adjusted_divergence_ratio": 1.0,
+    "dedup_max_abs_direction_cosine": 0.9,
+    "rank_metrics": [
+      "item_centered_support_slope",
+      "targeted_strong_effect",
+      "support_matched_alternative_effect",
+      "targeted_minus_random",
+      "targeted_preserved_minus_reset",
+      "support_adjusted_agreement",
+      "item_sign_consistency"
+    ]
+  },
   "generation": {
     "max_answer_tokens": 256,
     "max_choice_tokens": 8,

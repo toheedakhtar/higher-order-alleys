@@ -1,4 +1,4 @@
-"""Fail-closed runner for process-sensitive replay smoke infrastructure."""
+"""Fail-closed runner for process-sensitive replay through protocol freeze."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import csv
 import importlib.metadata
 import json
 import logging
+import math
+import os
 import platform
 import shutil
 import socket
@@ -18,8 +20,20 @@ from typing import Any, Iterable, Mapping
 import torch
 
 from experiments.higher_v_readout_global.runner import load_lens, load_model
+from experiments.higher_v_readout_global.steering import (
+    candidate_direction,
+    word_token_ids,
+)
 
 from .answer_bank import discover_answer
+from .discovery import (
+    DISCOVERY_CANDIDATE_CONDITIONS,
+    candidate_ranking_row,
+    measure_strength_grid_item,
+    rank_candidate_grid,
+    select_discovery_alpha,
+    select_discovery_strengths,
+)
 from .protocol import (
     GateStatus,
     allocate_discovery_split,
@@ -31,6 +45,7 @@ from .protocol import (
     gate_path,
     sha256_file,
     sha256_json,
+    validate_frozen_protocol,
     validate_config,
     write_gate,
 )
@@ -41,7 +56,14 @@ from .smoke import run_smoke_item, summarize_smoke
 PACKAGE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PACKAGE_DIR.parents[1]
 DEFAULT_CONFIG = PACKAGE_DIR / "experiment_config.json"
-SUPPORTED_PHASES = ("validate", "answer_bank", "pre_discovery_smoke", "post_freeze_smoke")
+SUPPORTED_PHASES = (
+    "validate",
+    "answer_bank",
+    "pre_discovery_smoke",
+    "discovery",
+    "freeze",
+    "post_freeze_smoke",
+)
 LOG_FILES = (
     "events.jsonl", "raw_runs.jsonl", "process_interventions.jsonl",
     "tokenizations.jsonl", "jlens_readouts.jsonl", "state_audits.jsonl",
@@ -277,6 +299,42 @@ def _write_candidate_scores(run_dir: Path, records: list[Mapping[str, Any]]) -> 
                             })
 
 
+def _append_frozen_discovery_candidate_scores(
+    path: Path,
+    vocab_scores: torch.Tensor,
+    *,
+    item_ids: list[str],
+    condition_names: tuple[str, ...],
+    branch_names: tuple[str, ...],
+    layers: list[int],
+    candidates: list[Mapping[str, Any]],
+) -> None:
+    fields = ["item_id", "phase", "condition", "branch", "layer", "token_id", "score", "raw_rank"]
+    with path.open("a", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        for candidate in candidates:
+            layer = int(candidate["layer"])
+            layer_offset = layers.index(layer)
+            token_id = int(candidate["token_id"])
+            for item_offset, item_id in enumerate(item_ids):
+                for condition_offset, condition in enumerate(condition_names):
+                    for branch_offset, branch in enumerate(branch_names):
+                        vector = vocab_scores[
+                            item_offset, condition_offset, branch_offset, layer_offset
+                        ].float()
+                        score = vector[token_id]
+                        writer.writerow({
+                            "item_id": item_id,
+                            "phase": "discovery",
+                            "condition": condition,
+                            "branch": branch,
+                            "layer": layer,
+                            "token_id": token_id,
+                            "score": float(score.item()),
+                            "raw_rank": int((vector > score).sum().item()) + 1,
+                        })
+
+
 def _log_smoke_record(run_dir: Path, record: Mapping[str, Any]) -> None:
     stamp = utc_now()
     append_jsonl(run_dir / "raw_runs.jsonl", {"timestamp": stamp, **record})
@@ -305,7 +363,12 @@ def _log_smoke_record(run_dir: Path, record: Mapping[str, Any]) -> None:
                 "readout": value["jlens"],
             })
     append_jsonl(run_dir / "events.jsonl", {
-        "timestamp": stamp, "event_type": "smoke_trial_completed",
+        "timestamp": stamp,
+        "event_type": (
+            "candidate_discovery_trial_completed"
+            if record["phase"] == "discovery"
+            else "smoke_trial_completed"
+        ),
         "phase": record["phase"], "item_id": record["item_id"],
     })
 
@@ -425,6 +488,539 @@ def _load_campaign_inputs(run_dir: Path, hashes: dict[str, str]) -> tuple[list[d
     return read_jsonl(answer_path), json.loads(split_path.read_text(encoding="utf-8"))
 
 
+def _load_pre_discovery_smoke_hash(run_dir: Path, hashes: dict[str, str]) -> None:
+    hashes["smoke_report"] = sha256_file(
+        run_dir / "pre_discovery_smoke" / "smoke_report.json"
+    )
+
+
+def _load_discovery_hashes(run_dir: Path, hashes: dict[str, str]) -> None:
+    discovery_dir = run_dir / "discovery"
+    for name, filename in (
+        ("discovery_strength_grid", "strength_grid.jsonl"),
+        ("discovery_vocab_scores", "discovery_vocab_scores.pt"),
+        ("candidate_metrics", "candidate_metrics.pt"),
+        ("discovery_trial_summary", "trial_summary.csv"),
+        ("discovery_candidate_scores", "candidate_scores.csv"),
+        ("candidate_discovery", "candidate_discovery.json"),
+    ):
+        hashes[name] = sha256_file(discovery_dir / filename)
+
+
+def _eligible_candidate_token_ids(tokenizer: Any, config: Mapping[str, Any]) -> list[int]:
+    eligible = {int(value) for value in word_token_ids(tokenizer).tolist()}
+    excluded = {int(value) for value in getattr(tokenizer, "all_special_ids", ())}
+    excluded.update(int(value) for value in config["readout"]["generic_evaluator_token_ids"])
+    for branch in config["meta_branches"].values():
+        for text_value in (branch["prompt"], *branch["labels"]):
+            token_ids = tokenizer(str(text_value), add_special_tokens=False)["input_ids"]
+            if token_ids and isinstance(token_ids[0], list):
+                token_ids = token_ids[0]
+            excluded.update(int(value) for value in token_ids)
+    result = sorted(eligible - excluded)
+    if not result:
+        raise RuntimeError("candidate_selection_gate_failed: token eligibility filter is empty")
+    return result
+
+
+def _extract_discovery_vocab_tensor(
+    record: dict[str, Any],
+    config: Mapping[str, Any],
+) -> torch.Tensor:
+    full = record.pop("_discovery_vocab_scores")
+    branches = tuple(str(value) for value in config["meta_branches"])
+    layers = tuple(str(int(value)) for value in config["layers"]["readout"])
+    tensor = torch.stack([
+        torch.stack([
+            torch.stack([
+                full[condition][branch][layer].float()
+                for layer in layers
+            ])
+            for branch in branches
+        ])
+        for condition in DISCOVERY_CANDIDATE_CONDITIONS
+    ])
+    if tensor.ndim != 4 or not torch.isfinite(tensor).all():
+        raise AssertionError("discovery full-vocabulary score tensor is invalid")
+    compact = tensor.to(torch.float16)
+    if not torch.isfinite(compact).all():
+        raise AssertionError("discovery full-vocabulary score compression is non-finite")
+    return compact
+
+
+def _candidate_support_row(
+    record: Mapping[str, Any],
+    *,
+    weak_alpha: float,
+    strong_alpha: float,
+) -> list[float]:
+    clean = float(record["support"]["clean"])
+    target_grid = record["support"]["target_grid"]
+    return [
+        0.0,
+        clean - float(target_grid[str(float(weak_alpha))]),
+        clean - float(target_grid[str(float(strong_alpha))]),
+        float(record["support"]["random_drop"]),
+        float(record["support"]["alternative_drop"]),
+        0.0,
+    ]
+
+
+def _assert_candidate_direction_files(
+    run_dir: Path,
+    candidates: Iterable[Mapping[str, Any]],
+) -> None:
+    for candidate in candidates:
+        direction_path = run_dir / str(candidate["direction_path"])
+        if sha256_file(direction_path) != candidate["direction_file_sha256"]:
+            raise AssertionError("stale candidate direction file hash")
+
+
+def run_discovery_phase(
+    args: argparse.Namespace,
+    run_dir: Path,
+    config: Mapping[str, Any],
+    hashes: dict[str, str],
+) -> dict[str, Any]:
+    phase = "discovery"
+    answers, split = _load_campaign_inputs(run_dir, hashes)
+    _load_pre_discovery_smoke_hash(run_dir, hashes)
+    assert_phase_prerequisites(
+        run_dir,
+        phase,
+        protocol_hash=combined_protocol_hash(hashes),
+        required_input_hashes=hashes,
+    )
+    _, tokenizer, lens_model, lens, adapter, runtime = load_runtime(args, config)
+    write_manifest(
+        run_dir, phase=phase, status="running", config=config, hashes=hashes, runtime=runtime
+    )
+    discovery_ids = [str(value) for value in split["discovery_item_ids"]]
+    heldout_ids = {str(value) for value in split["heldout_item_ids"]}
+    if len(discovery_ids) != 16 or set(discovery_ids) & heldout_ids:
+        raise AssertionError("candidate discovery split isolation failed")
+    by_id = {str(record["item_id"]): record for record in answers}
+    if any(item_id not in by_id or bool(by_id[item_id].get("invalid")) for item_id in discovery_ids):
+        raise AssertionError("candidate discovery includes a missing or invalid answer")
+
+    discovery_dir = run_dir / phase
+    strength_path = discovery_dir / "strength_grid.jsonl"
+    if strength_path.exists() and strength_path.stat().st_size:
+        raise RuntimeError("discovery strength grid already contains data")
+    alpha_records: list[dict[str, Any]] = []
+    for item_id in discovery_ids:
+        append_jsonl(run_dir / "events.jsonl", {
+            "timestamp": utc_now(),
+            "event_type": "discovery_alpha_grid_started",
+            "item_id": item_id,
+        })
+        alpha_records.append(measure_strength_grid_item(
+            adapter, by_id[item_id], config, families=("alpha",)
+        ))
+        logging.getLogger("process_sensitive_replay").info(
+            "discovery alpha grid item=%s completed=%d/%d",
+            item_id,
+            len(alpha_records),
+            len(discovery_ids),
+        )
+        append_jsonl(run_dir / "events.jsonl", {
+            "timestamp": utc_now(),
+            "event_type": "discovery_alpha_grid_completed",
+            "item_id": item_id,
+        })
+    alpha_selection = select_discovery_alpha(alpha_records, config)
+    append_jsonl(run_dir / "events.jsonl", {
+        "timestamp": utc_now(),
+        "event_type": "discovery_alpha_strengths_selected",
+        **alpha_selection,
+    })
+
+    beta_records: list[dict[str, Any]] = []
+    for item_id in discovery_ids:
+        append_jsonl(run_dir / "events.jsonl", {
+            "timestamp": utc_now(),
+            "event_type": "discovery_beta_grid_started",
+            "item_id": item_id,
+            "frozen_strong_alpha": alpha_selection["strong_alpha"],
+        })
+        beta_records.append(measure_strength_grid_item(
+            adapter, by_id[item_id], config, families=("beta",)
+        ))
+        logging.getLogger("process_sensitive_replay").info(
+            "discovery beta grid item=%s completed=%d/%d",
+            item_id,
+            len(beta_records),
+            len(discovery_ids),
+        )
+        append_jsonl(run_dir / "events.jsonl", {
+            "timestamp": utc_now(),
+            "event_type": "discovery_beta_grid_completed",
+            "item_id": item_id,
+            "frozen_strong_alpha": alpha_selection["strong_alpha"],
+        })
+
+    beta_by_id = {str(record["item_id"]): record for record in beta_records}
+    strength_records: list[dict[str, Any]] = []
+    for alpha_record in alpha_records:
+        item_id = str(alpha_record["item_id"])
+        beta_record = beta_by_id[item_id]
+        parity_fields = (
+            "clean_cache_digest",
+            "transcript_hash",
+            "question_token_hash",
+            "answer_token_hash",
+        )
+        if any(alpha_record[field] != beta_record[field] for field in parity_fields):
+            raise AssertionError("alpha/beta discovery passes lost clean replay parity")
+        if not math.isclose(
+            float(alpha_record["clean_support"]),
+            float(beta_record["clean_support"]),
+            abs_tol=float(config["reset_parity"]["absolute_tolerance"]),
+            rel_tol=float(config["reset_parity"]["relative_tolerance"]),
+        ):
+            raise AssertionError("alpha/beta discovery passes lost clean support parity")
+        record = {
+            **alpha_record,
+            "beta_grid": beta_record["beta_grid"],
+            "gradient_parity": {
+                "alpha_pass": alpha_record["gradient_parity"],
+                "beta_pass": beta_record["gradient_parity"],
+            },
+        }
+        strength_records.append(record)
+        append_jsonl(strength_path, record)
+        append_jsonl(run_dir / "state_audits.jsonl", {
+            "timestamp": utc_now(),
+            "phase": phase,
+            "item_id": item_id,
+            "clean_cache_digest": record["clean_cache_digest"],
+            "targeted_grid_cache_digests": {
+                strength: value["cache_digest"]
+                for strength, value in record["alpha_grid"].items()
+            },
+            "alternative_grid_cache_digests": {
+                strength: value["cache_digest"]
+                for strength, value in record["beta_grid"].items()
+            },
+            "gradient_parity": record["gradient_parity"],
+        })
+        for family_name in ("alpha_grid", "beta_grid"):
+            for strength, measurement in record[family_name].items():
+                for position in measurement["positions"]:
+                    append_jsonl(run_dir / "process_interventions.jsonl", {
+                        "timestamp": utc_now(),
+                        "phase": phase,
+                        "item_id": item_id,
+                        "grid": family_name,
+                        "grid_strength": strength,
+                        "support_before": record["clean_support"],
+                        "support_after": measurement["support_after"],
+                        **position,
+                    })
+        append_jsonl(run_dir / "events.jsonl", {
+            "timestamp": utc_now(),
+            "event_type": "discovery_strength_grid_completed",
+            "item_id": item_id,
+        })
+
+    strength_selection = select_discovery_strengths(strength_records, config)
+    if strength_selection["alpha"] != alpha_selection:
+        raise AssertionError("beta calibration changed the frozen alpha selection")
+    weak_alpha = float(strength_selection["alpha"]["weak_alpha"])
+    strong_alpha = float(strength_selection["alpha"]["strong_alpha"])
+    beta = float(strength_selection["beta"]["beta"])
+    selected_strengths = {
+        "weak_alpha": weak_alpha,
+        "strong_alpha": strong_alpha,
+        "beta": beta,
+    }
+    append_jsonl(run_dir / "events.jsonl", {
+        "timestamp": utc_now(),
+        "event_type": "discovery_strengths_selected",
+        **selected_strengths,
+    })
+
+    vocab_rows: list[torch.Tensor] = []
+    support_rows: list[list[float]] = []
+    candidate_records: list[dict[str, Any]] = []
+    for item_id in discovery_ids:
+        append_jsonl(run_dir / "events.jsonl", {
+            "timestamp": utc_now(),
+            "event_type": "candidate_discovery_trial_started",
+            "item_id": item_id,
+        })
+        record = run_smoke_item(
+            adapter,
+            lens_model,
+            lens,
+            tokenizer,
+            by_id[item_id],
+            config,
+            phase="discovery",
+            frozen_protocol=selected_strengths,
+            include_full_vocab=True,
+        )
+        vocab_rows.append(_extract_discovery_vocab_tensor(record, config))
+        support_rows.append(_candidate_support_row(
+            record, weak_alpha=weak_alpha, strong_alpha=strong_alpha
+        ))
+        candidate_records.append(record)
+        _log_smoke_record(run_dir, record)
+        logging.getLogger("process_sensitive_replay").info(
+            "discovery candidate replay item=%s completed=%d/%d",
+            item_id,
+            len(candidate_records),
+            len(discovery_ids),
+        )
+
+    vocab_scores = torch.stack(vocab_rows)
+    support_drops = torch.tensor(support_rows, dtype=torch.float32)
+    branch_names = tuple(str(value) for value in config["meta_branches"])
+    vocab_payload = {
+        "schema_version": 1,
+        "item_ids": discovery_ids,
+        "condition_names": list(DISCOVERY_CANDIDATE_CONDITIONS),
+        "branch_names": list(branch_names),
+        "layers": [int(value) for value in config["layers"]["readout"]],
+        "score_dtype": "float16",
+        "scores": vocab_scores,
+        "support_drops": support_drops,
+    }
+    vocab_path = discovery_dir / "discovery_vocab_scores.pt"
+    torch.save(vocab_payload, vocab_path)
+    hashes["discovery_strength_grid"] = sha256_file(strength_path)
+    hashes["discovery_vocab_scores"] = sha256_file(vocab_path)
+
+    primary_branch = str(config["candidate_selection"]["primary_branch"])
+    primary_branch_index = branch_names.index(primary_branch)
+    eligible_token_ids = _eligible_candidate_token_ids(tokenizer, config)
+    ranking = rank_candidate_grid(
+        vocab_scores[:, :, primary_branch_index, :, :],
+        support_drops,
+        layers=config["layers"]["readout"],
+        condition_names=DISCOVERY_CANDIDATE_CONDITIONS,
+        eligible_token_ids=eligible_token_ids,
+        config=config,
+    )
+    metrics_path = discovery_dir / "candidate_metrics.pt"
+    torch.save({
+        "schema_version": 1,
+        "item_ids": discovery_ids,
+        "layers": list(ranking["layers"]),
+        "vocab_size": ranking["vocab_size"],
+        "metric_names": list(ranking["metric_names"]),
+        "metrics": ranking["metrics"],
+        "eligibility": ranking["eligibility"],
+        "orientation": ranking["orientation"],
+        "support_adjusted_divergence_ratio": ranking[
+            "support_adjusted_divergence_ratio"
+        ],
+        "structured_sign_consistency": ranking["structured_sign_consistency"],
+        "random_sign_consistency": ranking["random_sign_consistency"],
+        "ranked_flat_indices": ranking["ranked_flat_indices"],
+        "aggregate_rank": ranking["aggregate_rank"],
+    }, metrics_path)
+    hashes["candidate_metrics"] = sha256_file(metrics_path)
+
+    selected_candidates: list[dict[str, Any]] = []
+    selected_directions: list[torch.Tensor] = []
+    dedup_rejections: list[dict[str, Any]] = []
+    maximum = int(config["candidate_selection"]["max_candidates"])
+    cosine_limit = float(
+        config["candidate_selection"]["dedup_max_abs_direction_cosine"]
+    )
+    for rank_offset in range(int(ranking["eligible_count"])):
+        row = candidate_ranking_row(ranking, rank_offset)
+        token_id = int(row["token_id"])
+        layer = int(row["layer"])
+        label = tokenizer.decode([token_id], clean_up_tokenization_spaces=False)
+        candidate = candidate_direction(
+            label=label,
+            token_id=token_id,
+            layer=layer,
+            lens_model=lens_model,
+            lens=lens,
+            checkpoint_dir=discovery_dir,
+        )
+        cosines = [
+            abs(float(torch.dot(candidate.direction.float(), previous.float()).item()))
+            for previous in selected_directions
+        ]
+        if cosines and max(cosines) > cosine_limit:
+            if len(dedup_rejections) < 100:
+                dedup_rejections.append({**row, "label": label, "max_abs_cosine": max(cosines)})
+            continue
+        direction_path = Path(candidate.direction_path)
+        metadata = candidate.metadata()
+        metadata["direction_path"] = str(direction_path.relative_to(run_dir))
+        selected_candidates.append({
+            **row,
+            "label": label,
+            **metadata,
+            "direction_file_sha256": sha256_file(direction_path),
+        })
+        selected_directions.append(candidate.direction.detach().cpu())
+        append_jsonl(run_dir / "events.jsonl", {
+            "timestamp": utc_now(),
+            "event_type": "candidate_direction_selected",
+            "token_id": token_id,
+            "layer": layer,
+            "orientation": row["orientation"],
+            "aggregate_rank": row["aggregate_rank"],
+            "direction_sha256": candidate.direction_sha256,
+        })
+        if len(selected_candidates) == maximum:
+            break
+    if not selected_candidates:
+        raise RuntimeError("candidate_selection_gate_failed: cosine dedup removed every candidate")
+
+    top_ranked = []
+    for offset in range(min(100, int(ranking["eligible_count"]))):
+        row = candidate_ranking_row(ranking, offset)
+        top_ranked.append({
+            **row,
+            "label": tokenizer.decode(
+                [row["token_id"]], clean_up_tokenization_spaces=False
+            ),
+        })
+    _write_trial_summary(discovery_dir, candidate_records)
+    _write_candidate_scores(discovery_dir, candidate_records)
+    _append_frozen_discovery_candidate_scores(
+        discovery_dir / "candidate_scores.csv",
+        vocab_scores,
+        item_ids=discovery_ids,
+        condition_names=DISCOVERY_CANDIDATE_CONDITIONS,
+        branch_names=branch_names,
+        layers=[int(value) for value in config["layers"]["readout"]],
+        candidates=selected_candidates,
+    )
+    hashes["discovery_trial_summary"] = sha256_file(
+        discovery_dir / "trial_summary.csv"
+    )
+    hashes["discovery_candidate_scores"] = sha256_file(
+        discovery_dir / "candidate_scores.csv"
+    )
+    discovery_payload = {
+        "schema_version": 1,
+        "experiment_name": "process_sensitive_replay",
+        "discovery_item_ids": discovery_ids,
+        "heldout_item_ids_accessed": [],
+        "source_hashes": dict(hashes),
+        "strength_selection": strength_selection,
+        **selected_strengths,
+        "candidate_selection": dict(config["candidate_selection"]),
+        "eligible_word_token_count": len(eligible_token_ids),
+        "eligible_word_token_ids_sha256": sha256_json(eligible_token_ids),
+        "eligible_direction_count": int(ranking["eligible_count"]),
+        "candidates": selected_candidates,
+        "candidate_token_ids": sorted({
+            int(candidate["token_id"]) for candidate in selected_candidates
+        }),
+        "top_ranked_candidates": top_ranked,
+        "dedup_rejections": dedup_rejections,
+    }
+    discovery_path = discovery_dir / "candidate_discovery.json"
+    discovery_path.write_text(
+        json.dumps(discovery_payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    hashes["candidate_discovery"] = sha256_file(discovery_path)
+    measurements = {
+        "discovery_items": len(discovery_ids),
+        "heldout_items_accessed": 0,
+        **selected_strengths,
+        "eligible_word_tokens": len(eligible_token_ids),
+        "eligible_directions": int(ranking["eligible_count"]),
+        "frozen_candidate_count": len(selected_candidates),
+        "frozen_candidates": [
+            {
+                "token_id": candidate["token_id"],
+                "layer": candidate["layer"],
+                "orientation": candidate["orientation"],
+                "direction_sha256": candidate["direction_sha256"],
+            }
+            for candidate in selected_candidates
+        ],
+    }
+    write_gate(run_dir, GateStatus(
+        phase=phase,
+        status="passed",
+        protocol_hash=combined_protocol_hash(hashes),
+        input_hashes=dict(hashes),
+        measurements=measurements,
+    ))
+    return measurements
+
+
+def run_freeze_phase(
+    run_dir: Path,
+    config: Mapping[str, Any],
+    hashes: dict[str, str],
+) -> dict[str, Any]:
+    phase = "freeze"
+    _answers, split = _load_campaign_inputs(run_dir, hashes)
+    _load_pre_discovery_smoke_hash(run_dir, hashes)
+    _load_discovery_hashes(run_dir, hashes)
+    assert_phase_prerequisites(
+        run_dir,
+        phase,
+        protocol_hash=combined_protocol_hash(hashes),
+        required_input_hashes=hashes,
+    )
+    discovery_path = run_dir / "discovery" / "candidate_discovery.json"
+    discovery = json.loads(discovery_path.read_text(encoding="utf-8"))
+    if discovery.get("heldout_item_ids_accessed") != []:
+        raise AssertionError("freeze rejected discovery with held-out access")
+    if [str(value) for value in discovery["discovery_item_ids"]] != [
+        str(value) for value in split["discovery_item_ids"]
+    ]:
+        raise AssertionError("freeze rejected a stale discovery split")
+    for name, expected in discovery.get("source_hashes", {}).items():
+        if hashes.get(name) != expected:
+            raise AssertionError(f"freeze rejected stale discovery source hash {name}")
+    _assert_candidate_direction_files(run_dir, discovery["candidates"])
+
+    source_hashes = dict(hashes)
+    frozen = {
+        "schema_version": 1,
+        "experiment_name": "process_sensitive_replay",
+        "frozen_at": utc_now(),
+        "source_hashes": source_hashes,
+        "discovery_item_ids": [str(value) for value in split["discovery_item_ids"]],
+        "weak_alpha": float(discovery["weak_alpha"]),
+        "strong_alpha": float(discovery["strong_alpha"]),
+        "beta": float(discovery["beta"]),
+        "strength_selection": discovery["strength_selection"],
+        "candidate_selection": dict(config["candidate_selection"]),
+        "support_matching": dict(config["support_matching"]),
+        "conditions": list(config["conditions"]),
+        "meta_branches": dict(config["meta_branches"]),
+        "candidates": discovery["candidates"],
+        "candidate_token_ids": discovery["candidate_token_ids"],
+        "heldout_access_permitted": False,
+    }
+    measurements = validate_frozen_protocol(frozen, config, split, source_hashes)
+    frozen_path = run_dir / "frozen_protocol.json"
+    if frozen_path.exists():
+        raise RuntimeError("frozen_protocol.json already exists")
+    frozen_temporary = run_dir / "frozen_protocol.json.tmp"
+    frozen_temporary.write_text(
+        json.dumps(frozen, indent=2, sort_keys=True, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(frozen_temporary, frozen_path)
+    hashes["frozen_protocol"] = sha256_file(frozen_path)
+    measurements["frozen_protocol_sha256"] = hashes["frozen_protocol"]
+    write_gate(run_dir, GateStatus(
+        phase=phase,
+        status="passed",
+        protocol_hash=combined_protocol_hash(hashes),
+        input_hashes=dict(hashes),
+        measurements=measurements,
+    ))
+    return measurements
+
+
 def run_smoke_phase(
     args: argparse.Namespace,
     run_dir: Path,
@@ -435,9 +1031,13 @@ def run_smoke_phase(
     answers, split = _load_campaign_inputs(run_dir, hashes)
     frozen = None
     if phase == "post_freeze_smoke":
+        _load_pre_discovery_smoke_hash(run_dir, hashes)
+        _load_discovery_hashes(run_dir, hashes)
         frozen_path = run_dir / "frozen_protocol.json"
-        hashes["frozen_protocol"] = sha256_file(frozen_path)
         frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
+        validate_frozen_protocol(frozen, config, split, dict(hashes))
+        _assert_candidate_direction_files(run_dir, frozen["candidates"])
+        hashes["frozen_protocol"] = sha256_file(frozen_path)
     assert_phase_prerequisites(
         run_dir, phase, protocol_hash=combined_protocol_hash(hashes),
         required_input_hashes=hashes,
@@ -516,6 +1116,10 @@ def main(argv: list[str] | None = None) -> int:
             result = run_validate(run_dir, config_path, config, hashes)
         elif args.phase == "answer_bank":
             result = run_answer_bank_phase(args, run_dir, config, hashes)
+        elif args.phase == "discovery":
+            result = run_discovery_phase(args, run_dir, config, hashes)
+        elif args.phase == "freeze":
+            result = run_freeze_phase(run_dir, config, hashes)
         else:
             result = run_smoke_phase(args, run_dir, config, hashes)
         write_manifest(run_dir, phase=args.phase, status="passed", config=config, hashes=hashes)

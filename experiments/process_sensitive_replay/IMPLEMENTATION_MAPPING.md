@@ -50,6 +50,17 @@ digests while at least one layer 32–63 must change. That is enforced directly.
    candidates.
 6. Permit held-out execution only after the post-freeze smoke gate passes.
 
+Discovery and freeze are now executable. Discovery performs the complete
+16-item alpha grid and freezes weak/strong alpha before beginning the separate
+16-item beta calibration. It then reruns those same discovery IDs with the
+selected global strengths for full-vocabulary candidate scoring. It records an
+empty held-out-access list, saves the score and metric tensors, reuses the
+existing meaningful-token filter and effective J-Lens direction construction,
+and freezes up to three cosine-deduplicated directions. Freeze is model-free:
+it validates the split, all discovery input hashes, direction-file hashes,
+strength-grid membership, prompts, conditions, and selection rules before
+atomically gating `frozen_protocol.json`.
+
 ## Answer-bank compatibility correction
 
 - Greedy answer generation has a frozen 256-token hard cap and still uses

@@ -18,6 +18,7 @@ from experiments.process_sensitive_replay.protocol import (
     phase_success_path,
     sha256_file,
     support_match_summary,
+    validate_frozen_protocol,
     validate_config,
     write_gate,
 )
@@ -76,6 +77,40 @@ class ProtocolTests(unittest.TestCase):
         result = support_match_summary([*passing[:12], *failing, (2.0, 3.0)], self.config)
         self.assertFalse(result["passed"])
         self.assertLess(result["item_match_fraction"], 0.65)
+
+    def test_frozen_protocol_binds_split_hashes_strengths_and_candidates(self) -> None:
+        split = {
+            "discovery_item_ids": [str(value) for value in range(16)],
+            "heldout_item_ids": [str(value) for value in range(16, 73)],
+        }
+        hashes = {"code": "abc", "candidate_discovery": "def"}
+        frozen = {
+            "schema_version": 1,
+            "experiment_name": "process_sensitive_replay",
+            "source_hashes": dict(hashes),
+            "discovery_item_ids": list(split["discovery_item_ids"]),
+            "weak_alpha": 0.02,
+            "strong_alpha": 0.1,
+            "beta": 0.2,
+            "candidate_selection": self.config["candidate_selection"],
+            "support_matching": self.config["support_matching"],
+            "conditions": self.config["conditions"],
+            "meta_branches": self.config["meta_branches"],
+            "candidates": [{
+                "token_id": 123,
+                "layer": 40,
+                "orientation": 1,
+                "direction_sha256": "tensor",
+                "direction_file_sha256": "file",
+            }],
+            "candidate_token_ids": [123],
+        }
+        result = validate_frozen_protocol(frozen, self.config, split, hashes)
+        self.assertEqual(result["candidate_count"], 1)
+        stale = json.loads(json.dumps(frozen))
+        stale["source_hashes"]["code"] = "changed"
+        with self.assertRaisesRegex(ValueError, "stale or missing code hash"):
+            validate_frozen_protocol(stale, self.config, split, hashes)
 
     def test_split_is_deterministic_and_stratified(self) -> None:
         rows = []

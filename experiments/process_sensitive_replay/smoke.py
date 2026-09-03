@@ -78,6 +78,8 @@ def _meta_branch(
     branch_config: Mapping[str, Any],
     config: Mapping[str, Any],
     explicit_token_ids: Sequence[int],
+    *,
+    include_full_vocab: bool = False,
 ) -> dict[str, Any]:
     turn3 = build_turn3_suffix(
         tokenizer,
@@ -102,6 +104,7 @@ def _meta_branch(
         layers=config["layers"]["readout"],
         top_k=int(config["readout"]["top_k"]),
         explicit_token_ids=explicit_token_ids,
+        include_full_scores=include_full_vocab,
     )
     labels = [str(value) for value in branch_config["labels"]]
     scores = score_label_pair_from_cache(adapter, boundary, logits, tokenizer, labels)
@@ -147,12 +150,15 @@ def _condition_meta(
     answer: Mapping[str, Any],
     config: Mapping[str, Any],
     explicit_token_ids: Sequence[int],
+    *,
+    include_full_vocab: bool = False,
 ) -> dict[str, Any]:
     assert_storage_disjoint(replay.cache, clone_hybrid_cache(replay.cache))
     return {
         name: _meta_branch(
             adapter, lens_model, lens, tokenizer, replay, answer, name,
             branch_config, config, explicit_token_ids,
+            include_full_vocab=include_full_vocab,
         )
         for name, branch_config in config["meta_branches"].items()
     }
@@ -177,13 +183,18 @@ def run_smoke_item(
     *,
     phase: str,
     frozen_protocol: Mapping[str, Any] | None = None,
+    include_full_vocab: bool = False,
 ) -> dict[str, Any]:
-    if phase not in {"pre_discovery_smoke", "post_freeze_smoke"}:
-        raise ValueError(f"not a smoke phase: {phase}")
+    if phase not in {"pre_discovery_smoke", "post_freeze_smoke", "discovery"}:
+        raise ValueError(f"unsupported replay phase: {phase}")
     if bool(answer.get("invalid")):
         raise ValueError(f"smoke item {answer['item_id']} has an invalid canonical answer")
     if phase == "post_freeze_smoke" and frozen_protocol is None:
         raise RuntimeError("post-freeze smoke requires frozen_protocol.json")
+    if phase == "discovery" and frozen_protocol is None:
+        raise RuntimeError("discovery candidate replay requires selected strengths")
+    if include_full_vocab and phase != "discovery":
+        raise ValueError("full-vocabulary readout is restricted to discovery")
     item_id = str(answer["item_id"])
     bundle = compute_clean_gradients(
         adapter,
@@ -300,7 +311,7 @@ def run_smoke_item(
     )
     target_drop = clean.answer_sequence_logp - targeted.answer_sequence_logp
     alternative_drop = clean.answer_sequence_logp - alternative.answer_sequence_logp
-    if target_drop <= 0:
+    if target_drop <= 0 and phase != "discovery":
         raise AssertionError("targeted intervention did not reduce answer support")
 
     explicit = [int(value) for value in config["readout"]["generic_evaluator_token_ids"]]
@@ -308,10 +319,20 @@ def run_smoke_item(
         explicit.extend(int(value) for value in frozen_protocol.get("candidate_token_ids", ()))
     meta = {
         condition: _condition_meta(
-            adapter, lens_model, lens, tokenizer, outcome, answer, config, explicit
+            adapter, lens_model, lens, tokenizer, outcome, answer, config, explicit,
+            include_full_vocab=include_full_vocab,
         )
         for condition, outcome in outcomes.items()
     }
+    turn3_process_hook_calls = sum(
+        int(branch["process_hook_calls"])
+        for branches in meta.values()
+        for branch in branches.values()
+    )
+    if turn3_process_hook_calls != 0:
+        raise AssertionError(
+            f"process hook fired {turn3_process_hook_calls} times during Turn 3"
+        )
     for branch_name in config["meta_branches"]:
         clean_branch = meta["clean_preserved"][branch_name]
         reset_branch = meta["clean_reset"][branch_name]
@@ -370,8 +391,16 @@ def run_smoke_item(
         }
         if len(question_positions) != 1 or len(question_token_ids) != 1:
             raise AssertionError(f"Turn-3 token/? alignment differs across conditions for {branch_name}")
-    for branches in meta.values():
+    discovery_vocab_scores: dict[str, dict[str, dict[str, torch.Tensor]]] = {}
+    for condition, branches in meta.items():
+        if include_full_vocab:
+            discovery_vocab_scores[condition] = {}
         for branch in branches.values():
+            if include_full_vocab:
+                discovery_vocab_scores[condition][str(branch["branch"])] = {
+                    str(layer): layer_data.pop("_full_scores")
+                    for layer, layer_data in branch["jlens"].items()
+                }
             branch.pop("_boundary_logits")
             branch.pop("_question_residuals")
     random_specs = random_schedule.positions
@@ -457,7 +486,7 @@ def run_smoke_item(
         condition="random_strong_preserved",
         support_after=random_control.answer_sequence_logp,
     ))
-    return {
+    result = {
         "item_id": item_id,
         "phase": phase,
         "gradient": {
@@ -511,11 +540,14 @@ def run_smoke_item(
             "reset_parity": True,
             "branch_isolation": True,
             "turn3_suffix_integrity": True,
-            "turn3_process_hook_calls": 0,
+            "turn3_process_hook_calls": turn3_process_hook_calls,
             "random_norm_match": True,
             "alternative_norm_ceiling": True,
         },
     }
+    if include_full_vocab:
+        result["_discovery_vocab_scores"] = discovery_vocab_scores
+    return result
 
 
 def summarize_smoke(

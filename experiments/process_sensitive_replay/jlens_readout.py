@@ -20,6 +20,7 @@ def readout_residual(
     layer: int,
     top_k: int,
     explicit_token_ids: Iterable[int],
+    include_full_scores: bool = False,
 ) -> dict[str, Any]:
     if layer not in lens.jacobians:
         raise RuntimeError(f"J-Lens checkpoint has no fitted layer {layer}")
@@ -45,7 +46,7 @@ def readout_residual(
         }
         for token_id in explicit_token_ids
     }
-    return {
+    result = {
         "layer": int(layer),
         "top_k": [
             {
@@ -62,6 +63,9 @@ def readout_residual(
         ],
         "explicit": explicit,
     }
+    if include_full_scores:
+        result["_full_scores"] = logits.clone()
+    return result
 
 
 def readout_layers(
@@ -72,6 +76,7 @@ def readout_layers(
     layers: Iterable[int],
     top_k: int,
     explicit_token_ids: Iterable[int],
+    include_full_scores: bool = False,
 ) -> dict[str, Any]:
     requested = [int(layer) for layer in layers]
     missing = sorted(set(requested) - set(residuals))
@@ -85,7 +90,7 @@ def readout_layers(
             layer=layer,
             top_k=top_k,
             explicit_token_ids=explicit_token_ids,
+            include_full_scores=include_full_scores,
         )
         for layer in requested
     }
-
