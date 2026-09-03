@@ -31,6 +31,7 @@ def smoke_record(item_id: str, targeted: float, alternative: float) -> dict:
             "downstream_state_changed": True,
             "reset_parity": True,
             "branch_isolation": True,
+            "turn3_suffix_integrity": True,
             "turn3_process_hook_calls": 0,
             "random_norm_match": True,
             "alternative_norm_ceiling": True,
@@ -63,6 +64,12 @@ class SmokeGateTests(unittest.TestCase):
     def test_any_critical_assertion_blocks_smoke(self) -> None:
         record = smoke_record("1", 2.0, 2.0)
         record["checks"]["reset_parity"] = False
+        with self.assertRaisesRegex(AssertionError, "critical smoke assertion"):
+            summarize_smoke([record], self.config, phase="pre_discovery_smoke")
+
+    def test_missing_turn3_suffix_integrity_blocks_smoke(self) -> None:
+        record = smoke_record("1", 2.0, 2.0)
+        del record["checks"]["turn3_suffix_integrity"]
         with self.assertRaisesRegex(AssertionError, "critical smoke assertion"):
             summarize_smoke([record], self.config, phase="pre_discovery_smoke")
 

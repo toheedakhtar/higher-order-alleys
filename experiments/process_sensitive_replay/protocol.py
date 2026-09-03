@@ -131,6 +131,15 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
         "hook_scope": "answer_predictor_positions_only",
     }:
         raise ValueError("frozen recurrent gradient replay contract changed")
+    turn3_replay = config["turn3_replay"]
+    if turn3_replay != {
+        "construction": "suffix_only",
+        "frozen_prefix_source": "answer_bank.post_answer_token_ids",
+        "rerender_factual_history": False,
+        "boundary_token": "<|im_end|>",
+        "require_exact_token_hash_parity": True,
+    }:
+        raise ValueError("frozen suffix-only Turn-3 replay contract changed")
     if len(dataset_rows) != int(config["dataset"]["expected_items"]):
         raise ValueError(f"expected 82 factual items, found {len(dataset_rows)}")
     counts: dict[str, int] = {}

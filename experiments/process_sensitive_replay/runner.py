@@ -480,6 +480,7 @@ def invalid_status(exc: BaseException) -> str:
         return "invalid_reset_parity"
     if any(term in message for term in (
         "cache", "state", "storage", "branch", "hook", "gradient", "logit parity",
+        "turn-3", "prefix-suffix", "factual prefix", "transcript token parity",
     )):
         return "invalid_cache_state"
     return "failed"

@@ -32,15 +32,15 @@ start when CUDA is unavailable, before loading or downloading Qwen or J-Lens.
 
 ## CUDA-host sequence
 
-The original `assets/psr` answer-bank campaign and `assets/psr-v2` recurrent
-parity failure are retained as failed diagnostics. After syncing the recurrent
-gradient correction, use the fresh `assets/psr-v3` campaign directory and the
-same CUDA host used for the prior runs:
+The original `assets/psr`, `assets/psr-v2`, and `assets/psr-v3` campaigns are
+retained as failed diagnostics. After syncing the suffix-only Turn-3
+correction, use the fresh `assets/psr-v4` campaign directory and the same CUDA
+host used for the prior runs:
 
 ```bash
-python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v3
-python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v3
-python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v3
+python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v4
+python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v4
+python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v4
 ```
 
 The pre-discovery smoke validates replay/token parity, hybrid state cloning,
@@ -48,11 +48,15 @@ state isolation, intervention indexing and sign, reset mechanics, J-Lens
 alignment, Turn-3 hook lifetime, and the complete alpha/beta grid machinery.
 It does not select or require a frozen beta.
 
+Turn 3 is constructed by rendering only its new suffix; the already-computed
+factual history is never rerendered. Prefix, suffix, boundary, and final
+transcript token hashes are exact critical gates.
+
 After the separately implemented discovery/freeze phase writes a hash-gated
 `frozen_protocol.json` and passing `freeze` gate, run:
 
 ```bash
-python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v3
+python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v4
 ```
 
 The post-freeze smoke reruns every critical check and additionally enforces

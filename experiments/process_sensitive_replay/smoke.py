@@ -21,12 +21,12 @@ from .gradient_intervention import (
     compute_clean_gradients,
 )
 from .jlens_readout import readout_layers
-from .protocol import hash_token_ids, support_match_summary
+from .protocol import support_match_summary
 from .replay import (
     QwenReplayAdapter,
     append_meta_prompt,
+    build_turn3_suffix,
     generate_from_cache,
-    locate_meta_question_and_suffix,
     replay_teacher_forced,
     score_label_pair_from_cache,
 )
@@ -79,13 +79,15 @@ def _meta_branch(
     config: Mapping[str, Any],
     explicit_token_ids: Sequence[int],
 ) -> dict[str, Any]:
-    suffix, question_position, rendered = locate_meta_question_and_suffix(
+    turn3 = build_turn3_suffix(
         tokenizer,
-        question=str(answer["question"]),
-        answer=str(answer["answer"]),
+        frozen_question_rendered=str(answer["question_rendered"]),
+        frozen_answer_text=str(answer["answer"]),
         post_answer_token_ids=answer["post_answer_token_ids"],
         meta_prompt=str(branch_config["prompt"]),
     )
+    suffix = list(turn3.token_ids)
+    question_position = turn3.question_position
     boundary, logits, residuals, cache_audit, process_hook_registrations = append_meta_prompt(
         adapter,
         source.cache,
@@ -114,9 +116,13 @@ def _meta_branch(
         "branch": branch_name,
         "prompt": branch_config["prompt"],
         "labels": labels,
-        "rendered": rendered,
+        "rendered": turn3.rendered_transcript,
+        "rendered_suffix": turn3.rendered_suffix,
         "suffix_token_ids": suffix,
-        "suffix_token_hash": hash_token_ids(suffix),
+        "prefix_token_hash": turn3.prefix_token_hash,
+        "suffix_token_hash": turn3.suffix_token_hash,
+        "boundary_token_hash": turn3.boundary_token_hash,
+        "final_transcript_token_hash": turn3.final_transcript_token_hash,
         "question_position": question_position,
         "question_token_id": int(tokenizer("?", add_special_tokens=False)["input_ids"][0]),
         "process_hook_calls": process_hook_registrations,
@@ -344,16 +350,25 @@ def run_smoke_item(
             context=f"targeted reset {branch_name} full logits",
         )
     for branch_name in config["meta_branches"]:
-        suffix_hashes = {
-            branches[branch_name]["suffix_token_hash"] for branches in meta.values()
-        }
+        hash_fields = (
+            "prefix_token_hash",
+            "suffix_token_hash",
+            "boundary_token_hash",
+            "final_transcript_token_hash",
+        )
+        for field in hash_fields:
+            values = {branches[branch_name][field] for branches in meta.values()}
+            if len(values) != 1:
+                raise AssertionError(
+                    f"Turn-3 {field} differs across conditions for {branch_name}"
+                )
         question_positions = {
             branches[branch_name]["question_position"] for branches in meta.values()
         }
         question_token_ids = {
             branches[branch_name]["question_token_id"] for branches in meta.values()
         }
-        if len(suffix_hashes) != 1 or len(question_positions) != 1 or len(question_token_ids) != 1:
+        if len(question_positions) != 1 or len(question_token_ids) != 1:
             raise AssertionError(f"Turn-3 token/? alignment differs across conditions for {branch_name}")
     for branches in meta.values():
         for branch in branches.values():
@@ -495,6 +510,7 @@ def run_smoke_item(
             "downstream_state_changed": True,
             "reset_parity": True,
             "branch_isolation": True,
+            "turn3_suffix_integrity": True,
             "turn3_process_hook_calls": 0,
             "random_norm_match": True,
             "alternative_norm_ceiling": True,
@@ -518,6 +534,7 @@ def summarize_smoke(
         "gradient_token_logit_parity", "gradient_total_support_parity",
         "gradient_residual_parity", "gradient_finite_nonzero",
         "gradient_hook_scope", "intervention_hook_scope",
+        "turn3_suffix_integrity",
     }
     for record in records:
         checks = record["checks"]

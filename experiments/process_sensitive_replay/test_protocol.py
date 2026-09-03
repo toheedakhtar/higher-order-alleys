@@ -53,6 +53,11 @@ class ProtocolTests(unittest.TestCase):
             self.config["gradient_replay"]["hook_scope"],
             "answer_predictor_positions_only",
         )
+        self.assertEqual(self.config["turn3_replay"]["construction"], "suffix_only")
+        self.assertIs(self.config["turn3_replay"]["rerender_factual_history"], False)
+        self.assertIs(
+            self.config["turn3_replay"]["require_exact_token_hash_parity"], True
+        )
 
     def test_item_support_match_uses_absolute_target_and_requires_positive_drop(self) -> None:
         self.assertTrue(item_support_matched(1.0, 1.5))

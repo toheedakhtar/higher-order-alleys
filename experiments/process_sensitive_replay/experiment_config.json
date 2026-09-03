@@ -75,6 +75,13 @@
     "parity_tolerance_source": "reset_parity",
     "hook_scope": "answer_predictor_positions_only"
   },
+  "turn3_replay": {
+    "construction": "suffix_only",
+    "frozen_prefix_source": "answer_bank.post_answer_token_ids",
+    "rerender_factual_history": false,
+    "boundary_token": "<|im_end|>",
+    "require_exact_token_hash_parity": true
+  },
   "smoke": {
     "item_count": 4,
     "require_cuda_for_real_model": true

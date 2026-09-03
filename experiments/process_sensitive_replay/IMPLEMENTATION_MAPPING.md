@@ -79,5 +79,20 @@ digests while at least one layer 32–63 must change. That is enforced directly.
   and intervention hooks must fire exactly at answer-predicting positions.
   Any mismatch is fail-closed and logged with its numerical differences.
 
+## Suffix-only Turn-3 compatibility correction
+
+- Qwen's chat template can alter an earlier assistant turn when a later user
+  turn is included, so the frozen factual history is never rerendered.
+- Turn 3 is rendered as a standalone user/generation suffix and appended to
+  the immutable `answer_bank.post_answer_token_ids` and its preserved hybrid
+  cache/state.
+- The constructor first re-encodes the stored answer-bank rendering without
+  calling the chat template, then requires exact factual-prefix parity.
+- Exact token/hash assertions cover the factual prefix, suffix, joint
+  `<|im_end|>` boundary, and complete concatenated transcript. The Turn-3 `?`
+  position and all four hashes must also agree across conditions.
+- A changed prefix, invalid boundary, or hash/token mismatch is fail-closed and
+  classified as invalid cache/state rather than interpreted.
+
 The present CPU workspace can unit-test this infrastructure but has
 `torch==2.13.0+cpu`; real model phases are intentionally blocked here.

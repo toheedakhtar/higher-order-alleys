@@ -8,9 +8,11 @@ import torch
 from experiments.process_sensitive_replay.answer_bank import discover_answer
 from experiments.process_sensitive_replay.replay import (
     DISABLED_THINKING_SUFFIX,
+    build_turn3_suffix,
     encode_chat,
     verify_thinking_disabled,
 )
+from experiments.process_sensitive_replay.protocol import hash_token_ids
 
 
 class TinyChatTokenizer:
@@ -43,25 +45,37 @@ class TinyChatTokenizer:
             rendered += DISABLED_THINKING_SUFFIX
         return rendered
 
-    def _encode(self, text: str) -> list[int]:
+    def _encode_with_offsets(self, text: str) -> tuple[list[int], list[tuple[int, int]]]:
         result: list[int] = []
+        offsets: list[tuple[int, int]] = []
         index = 0
         specials = sorted(self._special, key=len, reverse=True)
         while index < len(text):
             special = next((value for value in specials if text.startswith(value, index)), None)
             if special is not None:
                 result.append(self._special[special])
+                offsets.append((index, index + len(special)))
                 index += len(special)
             else:
                 result.append(ord(text[index]) + 1)
+                offsets.append((index, index + 1))
                 index += 1
-        return result
+        return result, offsets
+
+    def _encode(self, text: str) -> list[int]:
+        return self._encode_with_offsets(text)[0]
 
     def __call__(self, text, **kwargs):
-        ids = self._encode(text)
+        ids, offsets = self._encode_with_offsets(text)
         if kwargs.get("return_tensors") == "pt":
-            return {"input_ids": torch.tensor([ids], dtype=torch.long)}
-        return {"input_ids": ids}
+            result = {"input_ids": torch.tensor([ids], dtype=torch.long)}
+            if kwargs.get("return_offsets_mapping"):
+                result["offset_mapping"] = torch.tensor([offsets], dtype=torch.long)
+            return result
+        result = {"input_ids": ids}
+        if kwargs.get("return_offsets_mapping"):
+            result["offset_mapping"] = offsets
+        return result
 
     def decode(self, token_ids, **_kwargs):
         reverse = {value: key for key, value in self._special.items()}
@@ -152,6 +166,75 @@ class AnswerBankTests(unittest.TestCase):
         ]
         self.assertTrue(all(result["closed_empty_thinking_block"] for result in results))
         self.assertTrue(all(flag is False for flag in tokenizer.thinking_flags))
+
+    def test_turn3_is_a_suffix_over_an_immutable_factual_prefix(self) -> None:
+        tokenizer = TinyChatTokenizer()
+        question_rendered, question_ids = encode_chat(
+            tokenizer,
+            [{"role": "user", "content": "Q?"}],
+            add_generation_prompt=True,
+        )
+        answer = "AB"
+        answer_ids = tokenizer(answer, add_special_tokens=False)["input_ids"]
+        post_answer_ids = [*question_ids, *answer_ids, tokenizer.im_end_id]
+        before = list(post_answer_ids)
+
+        turn3 = build_turn3_suffix(
+            tokenizer,
+            frozen_question_rendered=question_rendered,
+            frozen_answer_text=answer,
+            post_answer_token_ids=post_answer_ids,
+            meta_prompt="Was that CORRECT?",
+        )
+
+        self.assertEqual(post_answer_ids, before)
+        self.assertEqual(turn3.prefix_token_hash, hash_token_ids(post_answer_ids))
+        self.assertTrue(turn3.rendered_suffix.startswith("\n<|im_start|>user\n"))
+        self.assertGreaterEqual(turn3.question_position, len(post_answer_ids))
+        concatenated = [*post_answer_ids, *turn3.token_ids]
+        self.assertEqual(turn3.final_transcript_token_hash, hash_token_ids(concatenated))
+        encoded_full = tokenizer(
+            turn3.rendered_transcript,
+            add_special_tokens=False,
+            return_tensors="pt",
+        )["input_ids"][0].tolist()
+        self.assertEqual(encoded_full, concatenated)
+
+    def test_turn3_fails_closed_on_invalid_factual_boundary(self) -> None:
+        tokenizer = TinyChatTokenizer()
+        question_rendered, question_ids = encode_chat(
+            tokenizer,
+            [{"role": "user", "content": "Q?"}],
+            add_generation_prompt=True,
+        )
+        answer_ids = tokenizer("AB", add_special_tokens=False)["input_ids"]
+        invalid_prefix = [*question_ids, *answer_ids, tokenizer.endoftext_id]
+        with self.assertRaisesRegex(AssertionError, "invalid Turn-3 chat boundary"):
+            build_turn3_suffix(
+                tokenizer,
+                frozen_question_rendered=question_rendered,
+                frozen_answer_text="AB",
+                post_answer_token_ids=invalid_prefix,
+                meta_prompt="Was that CORRECT?",
+            )
+
+    def test_turn3_fails_closed_if_stored_rendering_does_not_match_prefix(self) -> None:
+        tokenizer = TinyChatTokenizer()
+        question_rendered, question_ids = encode_chat(
+            tokenizer,
+            [{"role": "user", "content": "Q?"}],
+            add_generation_prompt=True,
+        )
+        answer_ids = tokenizer("AB", add_special_tokens=False)["input_ids"]
+        prefix = [*question_ids, *answer_ids, tokenizer.im_end_id]
+        with self.assertRaisesRegex(AssertionError, "stored factual rendering"):
+            build_turn3_suffix(
+                tokenizer,
+                frozen_question_rendered=question_rendered,
+                frozen_answer_text="AC",
+                post_answer_token_ids=prefix,
+                meta_prompt="Was that CORRECT?",
+            )
 
 
 if __name__ == "__main__":

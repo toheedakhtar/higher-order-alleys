@@ -278,41 +278,136 @@ def replay_teacher_forced(
     )
 
 
-def locate_meta_question_and_suffix(
+@dataclass(frozen=True)
+class Turn3Suffix:
+    """Audited suffix that can be appended to an immutable factual prefix."""
+
+    token_ids: tuple[int, ...]
+    question_position: int
+    rendered_suffix: str
+    rendered_transcript: str
+    prefix_token_hash: str
+    suffix_token_hash: str
+    boundary_token_hash: str
+    final_transcript_token_hash: str
+
+
+def build_turn3_suffix(
     tokenizer: Any,
     *,
-    question: str,
-    answer: str,
+    frozen_question_rendered: str,
+    frozen_answer_text: str,
     post_answer_token_ids: Sequence[int],
     meta_prompt: str,
-) -> tuple[list[int], int, str]:
-    messages = [
-        {"role": "user", "content": question},
-        {"role": "assistant", "content": answer},
-        {"role": "user", "content": meta_prompt},
-    ]
-    rendered = render_chat(tokenizer, messages, add_generation_prompt=True)
-    encoded = encode_rendered(tokenizer, rendered, offsets=True)
-    ids = [int(value) for value in encoded["input_ids"][0].tolist()]
+) -> Turn3Suffix:
+    """Render only Turn 3 and prove that appending it preserves the prefix.
+
+    Qwen's template may rewrite an earlier assistant turn when a later user turn
+    is added.  The answer-bank rendering is therefore never passed back through
+    the template.  Only a standalone user/generation suffix is rendered.
+    """
     prefix = [int(value) for value in post_answer_token_ids]
-    if ids[: len(prefix)] != prefix:
-        raise AssertionError("Turn-3 rendering changed the canonical post-answer token prefix")
-    content_start = rendered.rfind(meta_prompt)
-    question_offset = meta_prompt.find("?")
+    if not prefix:
+        raise AssertionError("invalid Turn-3 chat boundary: empty factual prefix")
+    frozen_prefix = tuple(prefix)
+    prefix_hash = hash_token_ids(prefix)
+    canonical_end_ids = canonical_assistant_turn_end_ids(tokenizer)
+    if prefix[-len(canonical_end_ids) :] != canonical_end_ids:
+        raise AssertionError(
+            "invalid Turn-3 chat boundary: factual prefix does not end in <|im_end|>"
+        )
+
+    # This is the stored answer-bank rendering, reconstructed without invoking
+    # apply_chat_template on the already-computed factual history.
+    factual_rendered = (
+        str(frozen_question_rendered)
+        + str(frozen_answer_text)
+        + CANONICAL_ASSISTANT_TURN_TERMINATOR
+    )
+    factual_ids = [
+        int(value)
+        for value in encode_rendered(tokenizer, factual_rendered)["input_ids"][0].tolist()
+    ]
+    if factual_ids != prefix:
+        raise AssertionError(
+            "stored factual rendering does not reproduce frozen post-answer token IDs"
+        )
+
+    turn3_messages = [{"role": "user", "content": str(meta_prompt)}]
+    verify_thinking_disabled(tokenizer, turn3_messages)
+    standalone = render_chat(tokenizer, turn3_messages, add_generation_prompt=True)
+    if not standalone.startswith("<|im_start|>user\n"):
+        raise AssertionError(
+            "invalid Turn-3 chat boundary: standalone suffix does not start with a user turn"
+        )
+    rendered_suffix = "\n" + standalone
+    suffix_encoded = encode_rendered(tokenizer, rendered_suffix, offsets=True)
+    suffix_ids = [int(value) for value in suffix_encoded["input_ids"][0].tolist()]
+    if not suffix_ids:
+        raise AssertionError("invalid Turn-3 chat boundary: empty rendered suffix")
+
+    boundary_rendered = CANONICAL_ASSISTANT_TURN_TERMINATOR + rendered_suffix
+    boundary_ids = [
+        int(value)
+        for value in encode_rendered(tokenizer, boundary_rendered)["input_ids"][0].tolist()
+    ]
+    expected_boundary_ids = [*canonical_end_ids, *suffix_ids]
+    if boundary_ids != expected_boundary_ids:
+        raise AssertionError(
+            "Turn-3 prefix-suffix boundary token parity failed"
+        )
+    boundary_hash = hash_token_ids(boundary_ids)
+    if boundary_hash != hash_token_ids(expected_boundary_ids):
+        raise AssertionError("Turn-3 prefix-suffix boundary hash parity failed")
+
+    rendered_transcript = factual_rendered + rendered_suffix
+    final_ids = [
+        int(value)
+        for value in encode_rendered(tokenizer, rendered_transcript)["input_ids"][0].tolist()
+    ]
+    expected_final_ids = [*prefix, *suffix_ids]
+    if final_ids != expected_final_ids:
+        raise AssertionError("Turn-3 final concatenated transcript token parity failed")
+    final_hash = hash_token_ids(final_ids)
+    if final_hash != hash_token_ids(expected_final_ids):
+        raise AssertionError("Turn-3 final concatenated transcript hash parity failed")
+    if tuple(prefix) != frozen_prefix or hash_token_ids(prefix) != prefix_hash:
+        raise AssertionError("Turn-3 suffix construction mutated the frozen factual prefix")
+
+    content_start = rendered_suffix.rfind(str(meta_prompt))
+    question_offset = str(meta_prompt).find("?")
     if content_start < 0 or question_offset < 0:
         raise RuntimeError("could not locate Turn-3 question mark")
     character = content_start + question_offset
-    offsets = encoded["offset_mapping"][0].tolist()
-    question_position = next(
+    offsets = suffix_encoded["offset_mapping"][0].tolist()
+    local_question_position = next(
         (
-            index for index, (start, end) in enumerate(offsets)
+            index
+            for index, (start, end) in enumerate(offsets)
             if int(start) <= character < int(end) and int(end) > int(start)
         ),
         None,
     )
-    if question_position is None or ids[question_position] != int(tokenizer("?", add_special_tokens=False)["input_ids"][0]):
+    question_ids = tokenizer("?", add_special_tokens=False)["input_ids"]
+    if question_ids and isinstance(question_ids[0], list):
+        question_ids = question_ids[0]
+    if (
+        local_question_position is None
+        or len(question_ids) != 1
+        or suffix_ids[local_question_position] != int(question_ids[0])
+    ):
         raise AssertionError("Turn-3 '?' token alignment failed")
-    return ids[len(prefix) :], int(question_position), rendered
+
+    return Turn3Suffix(
+        token_ids=tuple(suffix_ids),
+        question_position=len(prefix) + int(local_question_position),
+        rendered_suffix=rendered_suffix,
+        rendered_transcript=rendered_transcript,
+        prefix_token_hash=prefix_hash,
+        suffix_token_hash=hash_token_ids(suffix_ids),
+        boundary_token_hash=boundary_hash,
+        final_transcript_token_hash=final_hash,
+    )
 
 
 def append_meta_prompt(

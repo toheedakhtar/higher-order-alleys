@@ -98,6 +98,29 @@ The canonical hashes will cover:
 
 Conditions will be compared by token hashes, not merely decoded strings.
 
+Turn 3 uses suffix-only construction. The canonical factual history is never
+rerendered after its `post_answer_token_ids` and hybrid cache/state have been
+frozen, because Qwen's chat template may conditionally rewrite an earlier
+assistant thinking prefix when another user turn is added. For each meta
+branch, the runner renders only a standalone Turn-3 user turn plus the frozen
+no-thinking assistant-generation prefix, prepends the single required newline,
+and appends those suffix IDs to the preserved factual prefix/cache.
+
+Before advancing the cache, the runner must prove all of the following exactly:
+
+- the stored question rendering, answer text, and canonical `<|im_end|>`
+  reconstruct the frozen `post_answer_token_ids` without rerendering history;
+- the frozen prefix ends at the canonical assistant-turn boundary;
+- tokenizing `<|im_end|>` together with the new suffix equals the concatenation
+  of the independently frozen boundary token and suffix IDs;
+- tokenizing the final stored-render-plus-suffix transcript equals exactly
+  `post_answer_token_ids + suffix_token_ids`;
+- prefix, suffix, boundary, and final-transcript token hashes agree across all
+  matched conditions, and the `?` capture index is identical.
+
+Any changed prefix token, invalid chat boundary, hash mismatch, or concatenated
+transcript mismatch halts the phase fail-closed as `invalid_cache_state`.
+
 ## Answer-support gradient
 
 I recommend freezing:
@@ -294,7 +317,8 @@ Each post-answer state will be cloned into two branches:
 
 For each branch:
 
-1. Incrementally append the exact meta prompt.
+1. Render only the new Turn-3 suffix and incrementally append its exact token
+   IDs to a storage-disjoint clone of the preserved factual state.
 2. Capture residuals when the `?` token itself is processed.
 3. Continue to the output boundary.
 4. Clone again for:
@@ -476,6 +500,7 @@ Three gate families are causally critical:
 3. **Cache/state-integrity gate**
    - The perturbation must produce a persistent downstream state difference before Turn 3; all expected Qwen hybrid-state components must exist with valid shapes, positions, layer types, and finite values.
    - Condition and meta-branch states must be deep, storage-disjoint clones. Hashes of every source state must remain unchanged after any sibling branch runs. The factual-process hook invocation count must be zero during Turn 3.
+   - Turn 3 must be suffix-only: the frozen factual history may not be rerendered. Exact prefix, suffix, boundary, and final concatenated-transcript token/hash parity is mandatory across conditions, and any invalid chat boundary fails closed.
    - These assertions execute per item and condition. Any failure immediately halts the active phase and sets campaign status to `invalid_cache_state`.
 
 An invalid campaign may retain append-only raw records and produce a clearly watermarked gate-diagnostic report, including the item-level support-match plot/table needed to locate the failure. It must not produce confirmatory candidate-effect summaries, run hypothesis tests as though the campaign were valid, or enter the results-interpretation path. Resume may continue only from the last clean phase boundary after the defect is fixed under a new campaign/protocol hash; partial invalid outputs cannot be merged into a valid campaign.
@@ -524,6 +549,8 @@ CPU tests will cover:
 - reset-parity failure propagation;
 - branch independence;
 - transcript/hash equality;
+- immutable-prefix suffix-only Turn-3 construction, exact boundary/final token
+  parity, and rejection of invalid chat boundaries;
 - discovery/held-out access barriers;
 - candidate-ranking determinism;
 - item-level bootstrap behavior.
@@ -542,9 +569,11 @@ The pre-discovery engineering smoke must prove all applicable infrastructure pro
 - reset removes the difference;
 - clean preserved and clean reset agree within frozen tolerance;
 - meta readout is taken from the preserved state;
+- Turn-3 suffix construction preserves every frozen factual prefix token and
+  passes exact boundary/final transcript hash parity across conditions;
 - no factual-process hook fires during either meta branch.
 
-The smoke reports must show per-position targeted, random, and alternative norms; targeted/alternative gradient cosine; support mismatch when a frozen beta exists; reset-parity measurements; hybrid-state digests; and transcript hashes. A support-match failure in post-freeze smoke, or a reset-parity, orthogonality, state-preservation, branch-isolation, or hook-lifetime failure in either smoke phase, is critical and stops the run. The runner must return a nonzero exit status and must not write a phase-success marker. Discovery may start only after pre-discovery engineering smoke passes. Held-out may start only after post-freeze critical smoke passes fail-closed.
+The smoke reports must show per-position targeted, random, and alternative norms; targeted/alternative gradient cosine; support mismatch when a frozen beta exists; reset-parity measurements; hybrid-state digests; and factual-prefix, Turn-3 suffix, prefix-suffix boundary, and final concatenated-transcript hashes. A support-match failure in post-freeze smoke, or a reset-parity, orthogonality, state-preservation, suffix-integrity, branch-isolation, or hook-lifetime failure in either smoke phase, is critical and stops the run. The runner must return a nonzero exit status and must not write a phase-success marker. Discovery may start only after pre-discovery engineering smoke passes. Held-out may start only after post-freeze critical smoke passes fail-closed.
 
 ## Results interpretation
 
