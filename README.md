@@ -8,6 +8,7 @@ Research code and artifacts for Jacobian-Lens experiments using Qwen3.6-27B.
 | --- | --- |
 | `experiments/higher_v_readout_global/` | Runnable global-steering experiment and CPU tests |
 | `experiments/self_v_external/` | Matched SELF-versus-OTHER paired experiment |
+| `experiments/process_sensitive_replay/` | Frozen-protocol matched replay and fail-closed smoke infrastructure |
 | `dataset/metacognition.csv` | The 90-row experiment dataset |
 | `assets/` | Parity exports and completed run artifacts |
 | `docs/` | Research context, migration notes, next-stage plan, and results |
