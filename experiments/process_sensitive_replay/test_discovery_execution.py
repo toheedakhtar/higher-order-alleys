@@ -6,9 +6,11 @@ import torch
 
 from experiments.process_sensitive_replay.discovery import (
     DISCOVERY_CANDIDATE_CONDITIONS,
+    alpha_grid_diagnostics,
     candidate_ranking_row,
     rank_candidate_grid,
     select_discovery_strengths,
+    select_discovery_alpha,
 )
 from experiments.process_sensitive_replay.protocol import load_config
 
@@ -91,6 +93,32 @@ class DiscoveryExecutionTests(unittest.TestCase):
         orientations = {(row["layer"], row["token_id"]): row["orientation"] for row in rows}
         self.assertEqual(orientations[(36, 2)], 1)
         self.assertEqual(orientations[(37, 3)], -1)
+
+    def test_alpha_collision_is_reportable_before_gate_failure(self) -> None:
+        drops = (0.1, 0.2, 0.3, 2.5, 5.0)
+        records = []
+        for item_index in range(16):
+            records.append({
+                "item_id": str(item_index),
+                "alpha_grid": {
+                    str(float(alpha)): {
+                        "support_drop": drop,
+                        "positions": [],
+                    }
+                    for alpha, drop in zip(
+                        self.config["strengths"]["alpha_grid"], drops, strict=True
+                    )
+                },
+            })
+        diagnostics = alpha_grid_diagnostics(records, self.config)
+        collision = diagnostics["grid"][3]
+        self.assertTrue(collision["weak_eligible"])
+        self.assertTrue(collision["strong_in_target_range"])
+        self.assertEqual(collision["alpha"], 0.1)
+        with self.assertRaisesRegex(
+            RuntimeError, "selected weak=0.1 strong=0.1"
+        ):
+            select_discovery_alpha(records, self.config)
 
     def test_candidate_ranking_fails_closed_without_eligible_direction(self) -> None:
         scores = torch.zeros(4, 6, 1, 8)

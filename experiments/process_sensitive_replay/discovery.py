@@ -85,7 +85,10 @@ def select_alpha_strengths(
     if weak is None or strong is None:
         raise RuntimeError("alpha_strength_gate_failed")
     if weak.alpha >= strong.alpha:
-        raise RuntimeError("alpha_strength_gate_failed: WEAK must be strictly smaller than STRONG")
+        raise RuntimeError(
+            "alpha_strength_gate_failed: WEAK must be strictly smaller than STRONG; "
+            f"selected weak={weak.alpha:g} strong={strong.alpha:g}"
+        )
     return {
         "weak_alpha": weak.alpha,
         "strong_alpha": strong.alpha,
@@ -343,21 +346,74 @@ def measure_strength_grid_item(
     }
 
 
-def select_discovery_strengths(
+def _alpha_trials(
+    records: Sequence[Mapping[str, Any]],
+    config: Mapping[str, Any],
+) -> list[AlphaTrial]:
+    if not records:
+        raise ValueError("discovery alpha selection received no records")
+    return [
+        AlphaTrial(
+            alpha=float(alpha_value),
+            support_drops=tuple(
+                float(record["alpha_grid"][str(float(alpha_value))]["support_drop"])
+                for record in records
+            ),
+            finite=_finite(tuple(
+                float(record["alpha_grid"][str(float(alpha_value))]["support_drop"])
+                for record in records
+            )),
+        )
+        for alpha_value in config["strengths"]["alpha_grid"]
+    ]
+
+
+def alpha_grid_diagnostics(
     records: Sequence[Mapping[str, Any]],
     config: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Select global alpha/beta from complete paired discovery-grid records."""
-    if not records:
-        raise ValueError("discovery strength selection received no records")
-    alpha_selection = select_discovery_alpha(records, config)
-    strong_alpha = float(alpha_selection["strong_alpha"])
+    strengths = config["strengths"]
+    low, high = (float(value) for value in strengths["strong_median_drop_range_nat"])
+    rows = []
+    for trial in _alpha_trials(records, config):
+        trial_median = median(trial.support_drops)
+        positive_items = sum(value > 0 for value in trial.support_drops)
+        rows.append({
+            "alpha": trial.alpha,
+            "support_drops": list(trial.support_drops),
+            "median_support_drop": trial_median,
+            "positive_items": positive_items,
+            "finite": trial.finite,
+            "weak_eligible": (
+                trial.finite
+                and trial_median >= float(strengths["weak_min_median_drop_nat"])
+                and positive_items >= int(strengths["weak_min_positive_items"])
+            ),
+            "strong_in_target_range": trial.finite and low <= trial_median <= high,
+            "strong_fallback_eligible": trial.finite and trial_median < high,
+        })
+    return {
+        "item_count": len(records),
+        "weak_rule": {
+            "minimum_median_drop_nat": float(strengths["weak_min_median_drop_nat"]),
+            "minimum_positive_items": int(strengths["weak_min_positive_items"]),
+        },
+        "strong_target_range_nat": [low, high],
+        "grid": rows,
+    }
+
+
+def _beta_trials(
+    records: Sequence[Mapping[str, Any]],
+    config: Mapping[str, Any],
+    *,
+    strong_alpha: float,
+) -> list[BetaTrial]:
     targeted_drops = tuple(
         float(record["alpha_grid"][str(strong_alpha)]["support_drop"])
         for record in records
     )
-
-    beta_trials = []
+    beta_trials: list[BetaTrial] = []
     for beta_value in config["strengths"]["beta_grid"]:
         beta = float(beta_value)
         alternative_drops = tuple(
@@ -392,6 +448,39 @@ def select_discovery_strengths(
             max_abs_cosine=max(cosines),
             finite=_finite((*targeted_drops, *alternative_drops, *norm_ratios, *cosines)),
         ))
+    return beta_trials
+
+
+def beta_grid_diagnostics(
+    records: Sequence[Mapping[str, Any]],
+    config: Mapping[str, Any],
+    *,
+    strong_alpha: float,
+) -> dict[str, Any]:
+    trials = _beta_trials(records, config, strong_alpha=float(strong_alpha))
+    return {
+        "item_count": len(records),
+        "frozen_strong_alpha": float(strong_alpha),
+        "grid": {
+            str(trial.beta): evaluate_beta_trial(trial, config)
+            for trial in trials
+        },
+    }
+
+
+def select_discovery_strengths(
+    records: Sequence[Mapping[str, Any]],
+    config: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Select global alpha/beta from complete paired discovery-grid records."""
+    if not records:
+        raise ValueError("discovery strength selection received no records")
+    alpha_selection = select_discovery_alpha(records, config)
+    beta_trials = _beta_trials(
+        records,
+        config,
+        strong_alpha=float(alpha_selection["strong_alpha"]),
+    )
     beta_selection = select_beta_strength(beta_trials, config)
     return {"alpha": alpha_selection, "beta": beta_selection}
 
@@ -402,12 +491,7 @@ def select_discovery_alpha(
 ) -> dict[str, Any]:
     if not records:
         raise ValueError("discovery alpha selection received no records")
-    alpha_trials = []
-    for alpha_value in config["strengths"]["alpha_grid"]:
-        alpha = float(alpha_value)
-        drops = tuple(float(record["alpha_grid"][str(alpha)]["support_drop"]) for record in records)
-        alpha_trials.append(AlphaTrial(alpha=alpha, support_drops=drops, finite=_finite(drops)))
-    return select_alpha_strengths(alpha_trials, config)
+    return select_alpha_strengths(_alpha_trials(records, config), config)
 
 
 def _descending_ordinal_ranks(values: torch.Tensor) -> torch.Tensor:

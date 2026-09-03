@@ -28,6 +28,8 @@ from experiments.higher_v_readout_global.steering import (
 from .answer_bank import discover_answer
 from .discovery import (
     DISCOVERY_CANDIDATE_CONDITIONS,
+    alpha_grid_diagnostics,
+    beta_grid_diagnostics,
     candidate_ranking_row,
     measure_strength_grid_item,
     rank_candidate_grid,
@@ -497,6 +499,10 @@ def _load_pre_discovery_smoke_hash(run_dir: Path, hashes: dict[str, str]) -> Non
 def _load_discovery_hashes(run_dir: Path, hashes: dict[str, str]) -> None:
     discovery_dir = run_dir / "discovery"
     for name, filename in (
+        ("discovery_alpha_grid", "alpha_grid.jsonl"),
+        ("discovery_alpha_diagnostics", "alpha_grid_diagnostics.json"),
+        ("discovery_beta_grid", "beta_grid.jsonl"),
+        ("discovery_beta_diagnostics", "beta_grid_diagnostics.json"),
         ("discovery_strength_grid", "strength_grid.jsonl"),
         ("discovery_vocab_scores", "discovery_vocab_scores.pt"),
         ("candidate_metrics", "candidate_metrics.pt"),
@@ -604,9 +610,20 @@ def run_discovery_phase(
         raise AssertionError("candidate discovery includes a missing or invalid answer")
 
     discovery_dir = run_dir / phase
+    alpha_path = discovery_dir / "alpha_grid.jsonl"
+    alpha_diagnostics_path = discovery_dir / "alpha_grid_diagnostics.json"
+    beta_path = discovery_dir / "beta_grid.jsonl"
+    beta_diagnostics_path = discovery_dir / "beta_grid_diagnostics.json"
     strength_path = discovery_dir / "strength_grid.jsonl"
-    if strength_path.exists() and strength_path.stat().st_size:
-        raise RuntimeError("discovery strength grid already contains data")
+    for path in (
+        alpha_path,
+        alpha_diagnostics_path,
+        beta_path,
+        beta_diagnostics_path,
+        strength_path,
+    ):
+        if path.exists() and path.stat().st_size:
+            raise RuntimeError(f"discovery diagnostic artifact already contains data: {path}")
     alpha_records: list[dict[str, Any]] = []
     for item_id in discovery_ids:
         append_jsonl(run_dir / "events.jsonl", {
@@ -614,9 +631,11 @@ def run_discovery_phase(
             "event_type": "discovery_alpha_grid_started",
             "item_id": item_id,
         })
-        alpha_records.append(measure_strength_grid_item(
+        alpha_record = measure_strength_grid_item(
             adapter, by_id[item_id], config, families=("alpha",)
-        ))
+        )
+        alpha_records.append(alpha_record)
+        append_jsonl(alpha_path, alpha_record)
         logging.getLogger("process_sensitive_replay").info(
             "discovery alpha grid item=%s completed=%d/%d",
             item_id,
@@ -628,6 +647,13 @@ def run_discovery_phase(
             "event_type": "discovery_alpha_grid_completed",
             "item_id": item_id,
         })
+    alpha_diagnostics = alpha_grid_diagnostics(alpha_records, config)
+    alpha_diagnostics_path.write_text(
+        json.dumps(alpha_diagnostics, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    hashes["discovery_alpha_grid"] = sha256_file(alpha_path)
+    hashes["discovery_alpha_diagnostics"] = sha256_file(alpha_diagnostics_path)
     alpha_selection = select_discovery_alpha(alpha_records, config)
     append_jsonl(run_dir / "events.jsonl", {
         "timestamp": utc_now(),
@@ -643,9 +669,11 @@ def run_discovery_phase(
             "item_id": item_id,
             "frozen_strong_alpha": alpha_selection["strong_alpha"],
         })
-        beta_records.append(measure_strength_grid_item(
+        beta_record = measure_strength_grid_item(
             adapter, by_id[item_id], config, families=("beta",)
-        ))
+        )
+        beta_records.append(beta_record)
+        append_jsonl(beta_path, beta_record)
         logging.getLogger("process_sensitive_replay").info(
             "discovery beta grid item=%s completed=%d/%d",
             item_id,
@@ -723,6 +751,18 @@ def run_discovery_phase(
             "item_id": item_id,
         })
 
+    beta_diagnostics = beta_grid_diagnostics(
+        strength_records,
+        config,
+        strong_alpha=float(alpha_selection["strong_alpha"]),
+    )
+    beta_diagnostics_path.write_text(
+        json.dumps(beta_diagnostics, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    hashes["discovery_beta_grid"] = sha256_file(beta_path)
+    hashes["discovery_beta_diagnostics"] = sha256_file(beta_diagnostics_path)
+    hashes["discovery_strength_grid"] = sha256_file(strength_path)
     strength_selection = select_discovery_strengths(strength_records, config)
     if strength_selection["alpha"] != alpha_selection:
         raise AssertionError("beta calibration changed the frozen alpha selection")
@@ -788,7 +828,6 @@ def run_discovery_phase(
     }
     vocab_path = discovery_dir / "discovery_vocab_scores.pt"
     torch.save(vocab_payload, vocab_path)
-    hashes["discovery_strength_grid"] = sha256_file(strength_path)
     hashes["discovery_vocab_scores"] = sha256_file(vocab_path)
 
     primary_branch = str(config["candidate_selection"]["primary_branch"])

@@ -61,6 +61,12 @@ it validates the split, all discovery input hashes, direction-file hashes,
 strength-grid membership, prompts, conditions, and selection rules before
 atomically gating `frozen_protocol.json`.
 
+Alpha item rows and aggregate eligibility diagnostics are persisted and hashed
+before alpha selection; beta rows and complete support-match diagnostics are
+persisted and hashed before beta selection. Selection failure therefore leaves
+auditable measurements but no success marker, frozen protocol, or path to the
+next phase.
+
 ## Answer-bank compatibility correction
 
 - Greedy answer generation has a frozen 256-token hard cap and still uses

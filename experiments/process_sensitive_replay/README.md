@@ -34,15 +34,15 @@ start when CUDA is unavailable, before loading or downloading Qwen or J-Lens.
 ## CUDA-host sequence
 
 The original `assets/psr`, `assets/psr-v2`, and `assets/psr-v3` campaigns are
-retained as failed diagnostics, and `assets/psr-v4` is retained as the passing
-pre-discovery smoke diagnostic. Adding executable discovery/freeze changes the
-code and protocol hashes, so use a fresh `assets/psr-v5` campaign on the same
-CUDA host:
+retained as failed diagnostics, `assets/psr-v4` is retained as the passing
+pre-discovery smoke diagnostic, and `assets/psr-v5` is retained as the failed
+alpha-selection diagnostic. Fail-path persistence changes the code hash, so
+use a fresh `assets/psr-v6` campaign on the same CUDA host:
 
 ```bash
-python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v5
-python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v5
-python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v5
+python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v6
+python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v6
+python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v6
 ```
 
 The pre-discovery smoke validates replay/token parity, hybrid state cloning,
@@ -57,9 +57,9 @@ transcript token hashes are exact critical gates.
 After pre-discovery smoke passes, run discovery and freeze in order:
 
 ```bash
-python -m experiments.process_sensitive_replay.runner --phase discovery --run-dir assets/psr-v5
-python -m experiments.process_sensitive_replay.runner --phase freeze --run-dir assets/psr-v5
-python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v5
+python -m experiments.process_sensitive_replay.runner --phase discovery --run-dir assets/psr-v6
+python -m experiments.process_sensitive_replay.runner --phase freeze --run-dir assets/psr-v6
+python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v6
 ```
 
 Discovery uses only the 16 IDs in `split_manifest.json`. It completes the alpha
@@ -68,6 +68,12 @@ support-matching pass. It then saves full-vocabulary discovery scores and
 deterministic candidate metrics and selects up to three cosine-deduplicated
 token/layer directions. Freeze is model-free and validates every source and
 direction-file hash before writing `frozen_protocol.json`.
+
+Alpha and beta item rows plus aggregate eligibility diagnostics are written and
+hashed before their respective selectors run. A failed strength gate therefore
+retains `alpha_grid.jsonl` / `alpha_grid_diagnostics.json` or
+`beta_grid.jsonl` / `beta_grid_diagnostics.json` for inspection without
+creating a success marker or permitting freeze.
 
 The post-freeze smoke reruns every critical check and additionally enforces
 support matching with the frozen beta. Any failed gate returns a nonzero exit

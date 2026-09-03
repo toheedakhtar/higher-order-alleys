@@ -45,6 +45,10 @@ class FreezePhaseTests(unittest.TestCase):
             discovery_dir = run_dir / "discovery"
             discovery_dir.mkdir()
             for filename in (
+                "alpha_grid.jsonl",
+                "alpha_grid_diagnostics.json",
+                "beta_grid.jsonl",
+                "beta_grid_diagnostics.json",
                 "strength_grid.jsonl",
                 "discovery_vocab_scores.pt",
                 "candidate_metrics.pt",
@@ -64,6 +68,18 @@ class FreezePhaseTests(unittest.TestCase):
 
             hashes["discovery_strength_grid"] = sha256_file(
                 discovery_dir / "strength_grid.jsonl"
+            )
+            hashes["discovery_alpha_grid"] = sha256_file(
+                discovery_dir / "alpha_grid.jsonl"
+            )
+            hashes["discovery_alpha_diagnostics"] = sha256_file(
+                discovery_dir / "alpha_grid_diagnostics.json"
+            )
+            hashes["discovery_beta_grid"] = sha256_file(
+                discovery_dir / "beta_grid.jsonl"
+            )
+            hashes["discovery_beta_diagnostics"] = sha256_file(
+                discovery_dir / "beta_grid_diagnostics.json"
             )
             hashes["discovery_vocab_scores"] = sha256_file(
                 discovery_dir / "discovery_vocab_scores.pt"

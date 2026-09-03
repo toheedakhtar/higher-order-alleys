@@ -306,6 +306,14 @@ Select the single global beta that minimizes median absolute support mismatch, s
 
 The chosen beta, tolerance, direction construction, fallback rule, and support-matching diagnostics are frozen in `frozen_protocol.json`. If no beta passes, discovery ends with `support_match_gate_failed`. The grid cannot be expanded inside the same campaign.
 
+Each discovery alpha row and the aggregate per-alpha median, positive-item
+count, finiteness, weak eligibility, and strong eligibility are flushed and
+hashed before the alpha selector executes. After alpha passes, the same rule
+applies to beta rows and their complete support-match diagnostics before beta
+selection. Thus a failed strength gate preserves the exact measurements that
+caused failure while still withholding the phase-success marker and all frozen
+strength/candidate artifacts. Diagnostic persistence never relaxes a gate.
+
 On held-out items, beta is never adapted. Support-match quality is evaluated as an experimental result and as a fail-closed validity gate. Before held-out execution, the protocol will freeze the aggregate discovery criteria above plus a minimum item-level match fraction of `0.65`. Held-out support matching passes only if the alternative has a positive median support drop, its median drop is within 25% of the targeted-strong median, its median absolute paired mismatch is no greater than `max(0.5 nat, 25% of the targeted-strong held-out median)`, and at least 65% of valid held-out items pass the item-specific tolerance. An item counts as support-matched only when `support_drop_targeted > 0` and its absolute paired mismatch is within `max(0.5 nat, 0.25 * abs(support_drop_targeted))`. Failure marks the held-out campaign invalid and blocks any process-property or `M(P)`-like interpretation.
 
 ## Meta branches and readout
