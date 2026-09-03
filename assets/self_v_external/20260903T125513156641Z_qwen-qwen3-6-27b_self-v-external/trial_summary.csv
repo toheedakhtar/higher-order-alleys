@@ -1,0 +1,29 @@
+item_id,item_type,domain,difficulty,condition,labels,factual_prompt,factual_answer,factual_answer_sha256,answer_key,factual_correct,factual_response_invalid,scoring_method,evaluation_prompt,question_mark_position,question_mark_token,candidate_token_id,candidate_layer,candidate_score,candidate_rank,candidate_word_filtered_rank,candidate_in_top_k,baseline_output_raw,baseline_output_normalized,baseline_valid,baseline_judgment_correct,baseline_margin,baseline_oriented_margin
+0,calibration,physics,1,self,CORRECT/INCORRECT,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Water boils at 100 degrees Celsius at standard atmospheric pressure.""",Verdict: TRUE,45d42e561ca90f0d734ab56e3f7bbe6026a137c31956ac16b201249552241faa,TRUE,True,False,regex_search_ignorecase_original_notebook,Is your answer CORRECT or INCORRECT? Reply exactly CORRECT or INCORRECT.,81,?,97817,40,10.5625,74,28,False,CORRECT,CORRECT,True,True,11.125120193619978,11.125120193619978
+0,calibration,physics,1,other,CORRECT/INCORRECT,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Water boils at 100 degrees Celsius at standard atmospheric pressure.""",Verdict: TRUE,45d42e561ca90f0d734ab56e3f7bbe6026a137c31956ac16b201249552241faa,TRUE,True,False,regex_search_ignorecase_original_notebook,Is their answer CORRECT or INCORRECT? Reply exactly CORRECT or INCORRECT.,81,?,97817,40,13.125,14,3,True,CORRECT,CORRECT,True,True,9.750137330415896,9.750137330415896
+66,prospective,chemistry,easy,self,PASS/FAIL,What is the chemical symbol for sodium?,"The chemical symbol for sodium is **Na**.
+
+",dd8e46b3f2c4c10b3521d6832237235f17b951515acf0234291151436d593ed4,Na,True,False,regex_search_ignorecase_original_notebook,Is your answer PASS or FAIL? Reply exactly PASS or FAIL.,36,?,97817,40,12.25,27,5,True,PASS,PASS,True,True,12.250000238445864,12.250000238445864
+66,prospective,chemistry,easy,other,PASS/FAIL,What is the chemical symbol for sodium?,"The chemical symbol for sodium is **Na**.
+
+",dd8e46b3f2c4c10b3521d6832237235f17b951515acf0234291151436d593ed4,Na,True,False,regex_search_ignorecase_original_notebook,Is their answer PASS or FAIL? Reply exactly PASS or FAIL.,36,?,97817,40,11.25,45,14,True,PASS,PASS,True,True,10.499999523613951,10.499999523613951
+73,prospective,neuroscience,hard,self,PASS/FAIL,"In Crewther & Hugrass (2012), what visual phenomenon did they use to demonstrate M/P pathway dissociation?","Based on the study by Crewther and Hugrass (2012), titled *""Dissociation of the magnocellular and parvocellular pathways using a novel visual stimulus,""* the visual phenomenon used to demonstrate M/P",c80f5b93f308523ea746fd8704f7e5fb8a03b869786ff037e4b96465ccf206d1,(?i)(rivalry|binocular|bistab),False,False,regex_search_ignorecase_original_notebook,Is your answer PASS or FAIL? Reply exactly PASS or FAIL.,94,?,97817,40,12.875,14,1,True,FAIL,FAIL,True,True,-2.1250000968575478,2.1250000968575478
+73,prospective,neuroscience,hard,other,PASS/FAIL,"In Crewther & Hugrass (2012), what visual phenomenon did they use to demonstrate M/P pathway dissociation?","Based on the study by Crewther and Hugrass (2012), titled *""Dissociation of the magnocellular and parvocellular pathways using a novel visual stimulus,""* the visual phenomenon used to demonstrate M/P",c80f5b93f308523ea746fd8704f7e5fb8a03b869786ff037e4b96465ccf206d1,(?i)(rivalry|binocular|bistab),False,False,regex_search_ignorecase_original_notebook,Is their answer PASS or FAIL? Reply exactly PASS or FAIL.,94,?,97817,40,10.5,34,11,True,FAIL,FAIL,True,True,-1.8749999105930328,1.8749999105930328
+87,knowledge_boundary,psychophysics,guess,self,PASS/FAIL,"In Cacioli (2026), what Weber fraction was found for the Qwen exploratory model in the magnitude comparison task?","The premise of your question contains factual errors regarding both the publication date and the existence of the cited study.
+
+",e63236e9c28c19d7cbac01cb008121af12dae8125d88aeb8c7b5665f7f00f5a1,(?i)0\.17|0\.18,False,False,regex_search_ignorecase_original_notebook,Is your answer PASS or FAIL? Reply exactly PASS or FAIL.,68,?,97817,40,12.375,24,5,True,PASS,PASS,True,False,4.87499984074384,-4.87499984074384
+87,knowledge_boundary,psychophysics,guess,other,PASS/FAIL,"In Cacioli (2026), what Weber fraction was found for the Qwen exploratory model in the magnitude comparison task?","The premise of your question contains factual errors regarding both the publication date and the existence of the cited study.
+
+",e63236e9c28c19d7cbac01cb008121af12dae8125d88aeb8c7b5665f7f00f5a1,(?i)0\.17|0\.18,False,False,regex_search_ignorecase_original_notebook,Is their answer PASS or FAIL? Reply exactly PASS or FAIL.,68,?,97817,40,10.375,53,19,False,PASS,PASS,True,False,8.125000284606358,-8.125000284606358
