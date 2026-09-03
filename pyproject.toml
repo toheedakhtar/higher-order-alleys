@@ -1,0 +1,15 @@
+[project]
+name = "higher-order-alleys"
+version = "0.1.0"
+description = "Global Jacobian-Lens experiments for isolating M(P) candidate"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "accelerate>=1.12.0",
+    "datasets>=5.0.1",
+    "jlens @ git+https://github.com/anthropics/jacobian-lens.git",
+    "matplotlib>=3.11.1",
+    "mlcroissant>=1.1.0",
+    "torch>=2.13.0",
+    "transformers>=5.15.1",
+]

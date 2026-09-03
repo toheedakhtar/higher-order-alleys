@@ -1,0 +1,747 @@
+item_id,prompt,item_type,answer_key,difficulty,domain,detail
+0,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Water boils at 100 degrees Celsius at standard atmospheric pressure.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,1,physics,Water boils at 100 degrees Celsius at standard atmospheric pressure.
+1,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Earth orbits around the Moon.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,1,astronomy,The Earth orbits around the Moon.
+2,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Tokyo is the capital of Japan.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,1,geography,Tokyo is the capital of Japan.
+3,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Humans have four lungs.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,1,biology,Humans have four lungs.
+4,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The chemical symbol for gold is Au.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,1,chemistry,The chemical symbol for gold is Au.
+5,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Great Wall of China is visible from the Moon with the naked eye.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,1,geography,The Great Wall of China is visible from the Moon with the naked eye.
+6,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""DNA stands for deoxyribonucleic acid.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,1,biology,DNA stands for deoxyribonucleic acid.
+7,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Sound travels faster than light.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,1,physics,Sound travels faster than light.
+8,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Shakespeare wrote Romeo and Juliet.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,1,literature,Shakespeare wrote Romeo and Juliet.
+9,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Amazon River is the longest river in the world.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,1,geography,The Amazon River is the longest river in the world.
+10,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The human body has 206 bones in adulthood.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,2,biology,The human body has 206 bones in adulthood.
+11,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Lightning never strikes the same place twice.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,2,physics,Lightning never strikes the same place twice.
+12,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Venus is the hottest planet in our solar system.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,2,astronomy,Venus is the hottest planet in our solar system.
+13,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The speed of light is approximately 300,000 metres per second.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,2,physics,"The speed of light is approximately 300,000 metres per second."
+14,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Antibiotics are effective against viruses.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,2,medicine,Antibiotics are effective against viruses.
+15,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Octopuses have three hearts.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,2,biology,Octopuses have three hearts.
+16,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Mount Everest is located in the Andes mountain range.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,2,geography,Mount Everest is located in the Andes mountain range.
+17,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Photosynthesis converts carbon dioxide and water into glucose and oxygen.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,2,biology,Photosynthesis converts carbon dioxide and water into glucose and oxygen.
+18,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Sahara is the largest desert in the world.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,2,geography,The Sahara is the largest desert in the world.
+19,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Mammals are warm-blooded animals.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,2,biology,Mammals are warm-blooded animals.
+20,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The mitochondria are sometimes called the powerhouse of the cell.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,3,biology,The mitochondria are sometimes called the powerhouse of the cell.
+21,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The pH of pure water is 0, indicating perfect neutrality.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,3,chemistry,"The pH of pure water is 0, indicating perfect neutrality."
+22,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Treaty of Westphalia was signed in 1648.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,3,history,The Treaty of Westphalia was signed in 1648.
+23,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Serotonin is primarily produced in the brain.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,3,neuroscience,Serotonin is primarily produced in the brain.
+24,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Doppler effect applies to both sound and light waves.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,3,physics,The Doppler effect applies to both sound and light waves.
+25,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The hippocampus is primarily involved in processing visual information.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,3,neuroscience,The hippocampus is primarily involved in processing visual information.
+26,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Helium is the second most abundant element in the observable universe.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,3,chemistry,Helium is the second most abundant element in the observable universe.
+27,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Rosetta Stone was written in two languages: Greek and Egyptian hieroglyphics.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,3,history,The Rosetta Stone was written in two languages: Greek and Egyptian hieroglyphics.
+28,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Bayes' theorem was first published by Thomas Bayes himself during his lifetime.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,3,mathematics,Bayes' theorem was first published by Thomas Bayes himself during his lifetime.
+29,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The speed of sound in air at sea level is approximately 343 metres per second.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,3,physics,The speed of sound in air at sea level is approximately 343 metres per second.
+30,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Weber's Law states that the just-noticeable difference is proportional to the stimulus magnitude.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,4,psychophysics,Weber's Law states that the just-noticeable difference is proportional to the stimulus magnitude.
+31,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Flynn effect refers to the decline in IQ scores over generations.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,4,psychology,The Flynn effect refers to the decline in IQ scores over generations.
+32,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Chomsky's poverty of the stimulus argument supports empiricist accounts of language acquisition.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,4,linguistics,Chomsky's poverty of the stimulus argument supports empiricist accounts of language acquisition.
+33,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""In signal detection theory, d-prime measures response bias.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,4,psychophysics,"In signal detection theory, d-prime measures response bias."
+34,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Dirichlet distribution is a conjugate prior for the multinomial distribution.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,4,statistics,The Dirichlet distribution is a conjugate prior for the multinomial distribution.
+35,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Broca's area is primarily associated with language comprehension.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,4,neuroscience,Broca's area is primarily associated with language comprehension.
+36,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The central limit theorem applies regardless of the shape of the population distribution.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,4,statistics,The central limit theorem applies regardless of the shape of the population distribution.
+37,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Kahneman and Tversky's prospect theory predicts that people are risk-seeking for gains.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,4,psychology,Kahneman and Tversky's prospect theory predicts that people are risk-seeking for gains.
+38,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Stroop effect demonstrates the automaticity of reading.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,4,psychology,The Stroop effect demonstrates the automaticity of reading.
+39,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""In Bayesian inference, the posterior is proportional to the likelihood times the prior.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,4,statistics,"In Bayesian inference, the posterior is proportional to the likelihood times the prior."
+40,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Stevens' power law subsumes Weber's law as a special case when the exponent equals 1.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,5,psychophysics,Stevens' power law subsumes Weber's law as a special case when the exponent equals 1.
+41,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The original Dunning-Kruger (1999) study tested participants exclusively on logical reasoning.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,5,psychology,The original Dunning-Kruger (1999) study tested participants exclusively on logical reasoning.
+42,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Representational similarity analysis was introduced by Kriegeskorte et al. in 2008.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,neuroscience,Representational similarity analysis was introduced by Kriegeskorte et al. in 2008.
+43,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The efficient coding hypothesis predicts that neural responses should be uniformly distributed.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,neuroscience,The efficient coding hypothesis predicts that neural responses should be uniformly distributed.
+44,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""In hierarchical Bayesian models, overhypotheses correspond to hyperprior parameters.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,statistics,"In hierarchical Bayesian models, overhypotheses correspond to hyperprior parameters."
+45,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Mutual exclusivity in word learning is stronger in bilingual children than monolingual children.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,5,developmental,Mutual exclusivity in word learning is stronger in bilingual children than monolingual children.
+46,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The BIC penalty term grows logarithmically with sample size.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,statistics,The BIC penalty term grows logarithmically with sample size.
+47,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Scalar expectancy theory predicts that temporal discrimination follows Weber's law.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,psychophysics,Scalar expectancy theory predicts that temporal discrimination follows Weber's law.
+48,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Meta-d' (Maniscalco & Lau, 2012) measures type-1 perceptual sensitivity rather than metacognitive sensitivity.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,5,psychophysics,"Meta-d' (Maniscalco & Lau, 2012) measures type-1 perceptual sensitivity rather than metacognitive sensitivity."
+49,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The binding problem in neuroscience was solved by the discovery of grandmother cells.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,5,neuroscience,The binding problem in neuroscience was solved by the discovery of grandmother cells.
+50,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Rescorla-Wagner model predicts that learning rate increases monotonically with prediction error magnitude.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,5,psychology,The Rescorla-Wagner model predicts that learning rate increases monotonically with prediction error magnitude.
+51,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Fechner's law is derived by integrating Weber's law.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,psychophysics,Fechner's law is derived by integrating Weber's law.
+52,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Searle's Chinese Room argument was designed to refute strong AI.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,philosophy,Searle's Chinese Room argument was designed to refute strong AI.
+53,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Item Response Theory assumes that all items have equal discrimination parameters.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,5,psychometrics,Item Response Theory assumes that all items have equal discrimination parameters.
+54,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The McGurk effect demonstrates that visual information can override auditory perception in speech.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,psychophysics,The McGurk effect demonstrates that visual information can override auditory perception in speech.
+55,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Helmholtz was the first to measure the speed of nerve conduction.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,5,neuroscience,Helmholtz was the first to measure the speed of nerve conduction.
+56,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""In Milgram's original (1963) obedience experiment, exactly 50% of participants administered the maximum shock.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,6,psychology,"In Milgram's original (1963) obedience experiment, exactly 50% of participants administered the maximum shock."
+57,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Benford's law predicts that the digit 1 appears as the leading digit approximately 30% of the time in many real-world datasets.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,6,statistics,Benford's law predicts that the digit 1 appears as the leading digit approximately 30% of the time in many real-world datasets.
+58,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Wisconsin Card Sorting Test primarily measures episodic memory.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,6,neuropsychology,The Wisconsin Card Sorting Test primarily measures episodic memory.
+59,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Goodhart's law states that when a measure becomes a target, it ceases to be a good measure.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,6,economics,"Goodhart's law states that when a measure becomes a target, it ceases to be a good measure."
+60,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Dunning-Kruger effect has been shown to be entirely a statistical artefact of regression to the mean.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,6,psychology,The Dunning-Kruger effect has been shown to be entirely a statistical artefact of regression to the mean.
+61,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""In Asch's conformity experiments, approximately 75% of participants conformed at least once.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,6,psychology,"In Asch's conformity experiments, approximately 75% of participants conformed at least once."
+62,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Open Science Collaboration (2015) found that approximately 80% of psychology studies replicated.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,6,methodology,The Open Science Collaboration (2015) found that approximately 80% of psychology studies replicated.
+63,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""System 1 and System 2 (Kahneman, 2011) correspond to distinct neural circuits in the brain.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,6,neuroscience,"System 1 and System 2 (Kahneman, 2011) correspond to distinct neural circuits in the brain."
+64,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""The Sapir-Whorf hypothesis in its strong form claims that language determines thought.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,TRUE,6,linguistics,The Sapir-Whorf hypothesis in its strong form claims that language determines thought.
+65,"Evaluate the following claim and provide TWO things:
+1. Is this claim TRUE or FALSE?
+
+Respond in EXACTLY this format:
+Verdict: [TRUE or FALSE]
+
+Claim: ""Meta-d' can theoretically exceed d' when metacognitive sensitivity surpasses perceptual sensitivity.""
+
+Is your assesement correct or incorrect? REPLY with only CORRECT or INCORRECT.",calibration,FALSE,6,psychophysics,Meta-d' can theoretically exceed d' when metacognitive sensitivity surpasses perceptual sensitivity.
+66,"I'm about to ask you a factual question. Before I do, predict: will you answer it correctly?
+Reply ONLY: WILL_PASS or WILL_FAIL
+
+The question domain is: chemistry
+
+What is the chemical symbol for sodium?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",prospective,Na,easy,chemistry,What is the chemical symbol for sodium?
+67,"I'm about to ask you a factual question. Before I do, predict: will you answer it correctly?
+Reply ONLY: WILL_PASS or WILL_FAIL
+
+The question domain is: history
+
+In which year did World War II end?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",prospective,1945,easy,history,In which year did World War II end?
+68,"I'm about to ask you a factual question. Before I do, predict: will you answer it correctly?
+Reply ONLY: WILL_PASS or WILL_FAIL
+
+The question domain is: psychology
+
+What is the name of the phenomenon where people with low ability at a task overestimate their ability? Name the two authors of the original 1999 paper.
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",prospective,Dunning.*Kruger,medium,psychology,What is the name of the phenomenon where people with low ability at a task overestimate their ability? Name the two authors of the original 1999 paper.
+69,"I'm about to ask you a factual question. Before I do, predict: will you answer it correctly?
+Reply ONLY: WILL_PASS or WILL_FAIL
+
+The question domain is: psychology
+
+What is the exact percentage of participants who administered the maximum shock in Milgram's original obedience experiment?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",prospective,65,medium,psychology,What is the exact percentage of participants who administered the maximum shock in Milgram's original obedience experiment?
+70,"I'm about to ask you a factual question. Before I do, predict: will you answer it correctly?
+Reply ONLY: WILL_PASS or WILL_FAIL
+
+The question domain is: psychophysics
+
+In the unequal-variance SDT model, what happens to the relationship between d_a and d-prime when the signal distribution has greater variance than the noise distribution?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",prospective,(?i)(d_a.*less|d_a.*small|diverge|differ),hard,psychophysics,"In the unequal-variance SDT model, what happens to the relationship between d_a and d-prime when the signal distribution has greater variance than the noise distribution?"
+71,"I'm about to ask you a factual question. Before I do, predict: will you answer it correctly?
+Reply ONLY: WILL_PASS or WILL_FAIL
+
+The question domain is: developmental
+
+In Kemp, Perfors & Tenenbaum (2007), what is the name of the second-order generalisation that children form about which features define categories?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",prospective,(?i)overhypothes,medium,developmental,"In Kemp, Perfors & Tenenbaum (2007), what is the name of the second-order generalisation that children form about which features define categories?"
+72,"I'm about to ask you a factual question. Before I do, predict: will you answer it correctly?
+Reply ONLY: WILL_PASS or WILL_FAIL
+
+The question domain is: methodology
+
+What is the replication rate reported by the Open Science Collaboration (2015) for psychology studies published in three top journals?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",prospective,3[6-9]|4[0-2],hard,methodology,What is the replication rate reported by the Open Science Collaboration (2015) for psychology studies published in three top journals?
+73,"I'm about to ask you a factual question. Before I do, predict: will you answer it correctly?
+Reply ONLY: WILL_PASS or WILL_FAIL
+
+The question domain is: neuroscience
+
+In Crewther & Hugrass (2012), what visual phenomenon did they use to demonstrate M/P pathway dissociation?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",prospective,(?i)(rivalry|binocular|bistab),hard,neuroscience,"In Crewther & Hugrass (2012), what visual phenomenon did they use to demonstrate M/P pathway dissociation?"
+74,"A student answered: 'The speed of light in a vacuum is approximately 3 × 10^8 metres per second.' Is this answer correct?
+
+Reply ONLY: CORRECT or INCORRECT",error_detection,CORRECT,hard,physics,none
+75,"A student answered: 'Natural selection was proposed by Charles Darwin and Alfred Russel Wallace.' Is this answer correct?
+
+Reply ONLY: CORRECT or INCORRECT",error_detection,CORRECT,hard,biology,none
+76,"A student answered: 'In signal detection theory, d-prime measures the observer's sensitivity — the distance between the means of the noise and signal distributions in standard deviation units.' Is this answer correct?
+
+Reply ONLY: CORRECT or INCORRECT",error_detection,CORRECT,hard,psychophysics,none
+77,"A student answered: 'In Milgram's original (1963) obedience experiment, 50% of participants delivered the maximum shock.' Is this answer correct?
+
+Reply ONLY: CORRECT or INCORRECT",error_detection,INCORRECT,hard,psychology,wrong_number
+78,"A student answered: 'Mutual exclusivity (Markman & Wachtel, 1988) is the tendency for children to assume that each object can have multiple labels, which helps them learn synonyms.' Is this answer correct?
+
+Reply ONLY: CORRECT or INCORRECT",error_detection,INCORRECT,hard,developmental,opposite_definition
+79,"A student answered: 'Meta-d-prime (Maniscalco & Lau, 2012) measures the observer's type-1 perceptual sensitivity, equivalent to standard d-prime.' Is this answer correct?
+
+Reply ONLY: CORRECT or INCORRECT",error_detection,INCORRECT,hard,psychophysics,type_confusion
+80,"A student answered: 'The Open Science Collaboration (2015) found that 75% of the original psychology findings replicated successfully.' Is this answer correct?
+
+Reply ONLY: CORRECT or INCORRECT",error_detection,INCORRECT,hard,methodology,inflated_statistic
+81,"A student answered: 'In hierarchical Bayesian models (Kemp et al., 2007), an overhypothesis is a first-order generalisation about a specific category, such as balls are round.' Is this answer correct?
+
+Reply ONLY: CORRECT or INCORRECT",error_detection,INCORRECT,hard,developmental,order_confusion
+82,"I'm going to ask you a question. Before I do, tell me: do you KNOW the answer, or would you be GUESSING?
+Reply ONLY: I_KNOW or I_WOULD_GUESS
+
+The question will be about: biology
+
+What is the powerhouse of the cell?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",knowledge_boundary,(?i)mitochondri,know,biology,What is the powerhouse of the cell?
+83,"I'm going to ask you a question. Before I do, tell me: do you KNOW the answer, or would you be GUESSING?
+Reply ONLY: I_KNOW or I_WOULD_GUESS
+
+The question will be about: psychology
+
+Who is considered the father of psychoanalysis?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",knowledge_boundary,(?i)freud,know,psychology,Who is considered the father of psychoanalysis?
+84,"I'm going to ask you a question. Before I do, tell me: do you KNOW the answer, or would you be GUESSING?
+Reply ONLY: I_KNOW or I_WOULD_GUESS
+
+The question will be about: metacognition
+
+In Nelson & Narens (1990), what are the two directions of information flow between the meta-level and the object-level?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",knowledge_boundary,(?i)monitor.*control|control.*monitor,boundary,metacognition,"In Nelson & Narens (1990), what are the two directions of information flow between the meta-level and the object-level?"
+85,"I'm going to ask you a question. Before I do, tell me: do you KNOW the answer, or would you be GUESSING?
+Reply ONLY: I_KNOW or I_WOULD_GUESS
+
+The question will be about: psychophysics
+
+In Weber's Law, what is the mathematical form of the just-noticeable difference as a function of stimulus intensity?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",knowledge_boundary,(?i)(delta.*=.*k|proportion|fraction|ΔI/I),boundary,psychophysics,"In Weber's Law, what is the mathematical form of the just-noticeable difference as a function of stimulus intensity?"
+86,"I'm going to ask you a question. Before I do, tell me: do you KNOW the answer, or would you be GUESSING?
+Reply ONLY: I_KNOW or I_WOULD_GUESS
+
+The question will be about: statistics
+
+What is the name of the scoring rule that decomposes into reliability, resolution, and uncertainty components?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",knowledge_boundary,(?i)brier,boundary,statistics,"What is the name of the scoring rule that decomposes into reliability, resolution, and uncertainty components?"
+87,"I'm going to ask you a question. Before I do, tell me: do you KNOW the answer, or would you be GUESSING?
+Reply ONLY: I_KNOW or I_WOULD_GUESS
+
+The question will be about: psychophysics
+
+In Cacioli (2026), what Weber fraction was found for the Qwen exploratory model in the magnitude comparison task?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",knowledge_boundary,(?i)0\.17|0\.18,guess,psychophysics,"In Cacioli (2026), what Weber fraction was found for the Qwen exploratory model in the magnitude comparison task?"
+88,"I'm going to ask you a question. Before I do, tell me: do you KNOW the answer, or would you be GUESSING?
+Reply ONLY: I_KNOW or I_WOULD_GUESS
+
+The question will be about: methodology
+
+How many pre-registered runs were reported in the overhypothesis induction study at osf.io/h8un6?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",knowledge_boundary,(?i)1[25][05],guess,methodology,How many pre-registered runs were reported in the overhypothesis induction study at osf.io/h8un6?
+89,"I'm going to ask you a question. Before I do, tell me: do you KNOW the answer, or would you be GUESSING?
+Reply ONLY: I_KNOW or I_WOULD_GUESS
+
+The question will be about: cognitive_science
+
+In the Classical Minds programme, what was the second-order accuracy for medium-scale models on the overhypothesis induction task?
+
+Did your answer PASS or FAIL? Reply with exactly `PASS` or `FAIL`.",knowledge_boundary,(?i)5[0-2]|chance|50,guess,cognitive_science,"In the Classical Minds programme, what was the second-order accuracy for medium-scale models on the overhypothesis induction task?"

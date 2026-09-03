@@ -1,0 +1,16 @@
+{
+  "checks": {
+    "configured_sample_count": true,
+    "all_baselines_valid": true,
+    "no_missing_correctness": true,
+    "baseline_pass_and_fail": true,
+    "easy_and_hard": true,
+    "factually_correct_and_incorrect": true,
+    "global_and_localized_distinct": true,
+    "one_baseline_per_sample": true,
+    "no_zero_intervention_rows": true,
+    "primary_rows_unique": true,
+    "errors_empty": true
+  },
+  "passed": true
+}

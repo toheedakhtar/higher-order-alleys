@@ -1,0 +1,114 @@
+{
+  "model": {
+    "id": "Qwen/Qwen3.6-27B",
+    "revision": "main",
+    "dtype": "bfloat16",
+    "device_map": "cuda"
+  },
+  "lens": {
+    "repo": "neuronpedia/jacobian-lens",
+    "file": "qwen3.6-27b/jlens/Salesforce-wikitext/Qwen3.6-27B_jacobian_lens_n1000.pt",
+    "revision": "main",
+    "resident_jacobians": true
+  },
+  "dataset": {
+    "path": "datasets/MMB/metacognition.csv"
+  },
+  "seed": 42,
+  "readout_top_k": 50,
+  "rank_policy": {
+    "appearance_rank": "word_filtered_rank",
+    "appearance_rank_threshold": 50,
+    "word_filter": "jlens_meaningful_token_mask"
+  },
+  "candidates": [
+    {
+      "label": "评价",
+      "token_id": 97817,
+      "display_description": "Neuronpedia manual target; visually second 'to evaluate'",
+      "enabled": true
+    },
+    {
+      "label": "评估",
+      "token_id": 99973,
+      "display_description": "visually first 'to evaluate' candidate",
+      "enabled": true
+    }
+  ],
+  "interventions": {
+    "primary": {
+      "mode": "neuronpedia_global",
+      "candidate_token_id": 97817,
+      "layer": 40,
+      "direction_source_selector": "question_mark",
+      "strengths": [
+        0.0,
+        -1.7,
+        1.8
+      ],
+      "max_injection_fraction": 1.0,
+      "steer_generated": true
+    },
+    "localized_control": {
+      "enabled": true,
+      "mode": "single_position",
+      "positions": [
+        "question_mark",
+        "meaningful_token_before_question_mark"
+      ],
+      "strengths": [
+        0.0,
+        -1.7,
+        -1.8,
+        1.8
+      ]
+    },
+    "adaptive_rescue": {
+      "enabled": true,
+      "mode": "neuronpedia_global",
+      "max_appearance_layers_per_candidate": 2,
+      "stop_after_first_flip": true,
+      "strengths": [
+        -1.7,
+        1.8
+      ]
+    }
+  },
+  "generation": {
+    "max_choice_tokens": 8,
+    "max_answer_tokens": 48,
+    "temperature": 0,
+    "do_sample": false,
+    "use_cache": false
+  },
+  "controls": {
+    "forced_output_items": 4
+  },
+  "parity": {
+    "item_ids": [
+      "73",
+      "72"
+    ],
+    "export_path": "assets/jlens-chat-qwen3_6-27b-2026-09-02T18-16-46-541Z-steer.json",
+    "expected_prompt_tokens": 231,
+    "expected_source_position": 214,
+    "expected_baseline": "FAIL",
+    "expected_exported_intervention": "PASS",
+    "minimum_pass_margin_increase": 1.0
+  },
+  "pilot": {
+    "item_ids": [
+      "66",
+      "72",
+      "73",
+      "87"
+    ],
+    "require_baseline_pass_and_fail": true,
+    "require_easy_and_hard": true,
+    "require_factually_correct_and_incorrect": true
+  },
+  "interpretation": {
+    "maximum_claim": "causal distributed evaluator/readout effect",
+    "prohibited_claim": "higher-order representation M(P)"
+  }
+}
