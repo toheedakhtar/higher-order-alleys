@@ -185,12 +185,26 @@ def run_smoke_item(
         prefix_length=len(answer["question_prefix_token_ids"]),
         answer_token_ids=answer["answer_token_ids"],
         process_layer=int(config["layers"]["process"]),
+        atol=float(config["reset_parity"]["absolute_tolerance"]),
+        rtol=float(config["reset_parity"]["relative_tolerance"]),
     )
     clean = _replay(adapter, answer, None)
     atol = float(config["reset_parity"]["absolute_tolerance"])
     rtol = float(config["reset_parity"]["relative_tolerance"])
     if not math.isclose(clean.answer_sequence_logp, bundle.answer_sequence_logp, abs_tol=atol, rel_tol=rtol):
-        raise AssertionError("clean cached support does not match clean gradient-pass support")
+        raise AssertionError(
+            "clean cached support does not match recurrent gradient-pass support: "
+            f"cached={clean.answer_sequence_logp:.9g} "
+            f"gradient={bundle.answer_sequence_logp:.9g} "
+            f"abs_diff={abs(clean.answer_sequence_logp - bundle.answer_sequence_logp):.9g}"
+        )
+    assert_numeric_parity(
+        torch.tensor(clean.token_logprobs),
+        torch.tensor(bundle.token_logprobs),
+        atol=atol,
+        rtol=rtol,
+        context="clean recurrent gradient per-token answer log probabilities",
+    )
 
     alpha_values = (
         [float(frozen_protocol["weak_alpha"]), float(frozen_protocol["strong_alpha"])]
@@ -239,6 +253,13 @@ def run_smoke_item(
     if frozen_protocol is not None:
         outcomes["targeted_weak_preserved"] = target_grid[float(frozen_protocol["weak_alpha"])]
     _assert_hash_parity(outcomes)
+    for condition, outcome in outcomes.items():
+        if outcome.process_hook_positions != outcome.intervention_positions:
+            raise AssertionError(
+                f"process hook escaped declared positions for {condition}: "
+                f"declared={outcome.intervention_positions} "
+                f"observed={outcome.process_hook_positions}"
+            )
     if len({id(outcome.cache) for outcome in outcomes.values()}) != len(outcomes):
         raise AssertionError("experimental conditions share a cache object")
     layer_types = list(adapter.text_config.layer_types)
@@ -428,6 +449,8 @@ def run_smoke_item(
             "clean_support": bundle.answer_sequence_logp,
             "predictor_positions": list(bundle.predictor_positions),
             "answer_token_ids": list(bundle.answer_token_ids),
+            "token_logprobs": list(bundle.token_logprobs),
+            "parity": bundle.parity,
         },
         "support": {
             "clean": clean.answer_sequence_logp,
@@ -462,6 +485,12 @@ def run_smoke_item(
             "visible_hash_parity": True,
             "teacher_forcing_all_conditions": True,
             "clean_gradient_cache_support_parity": True,
+            "gradient_token_logit_parity": True,
+            "gradient_total_support_parity": True,
+            "gradient_residual_parity": True,
+            "gradient_finite_nonzero": True,
+            "gradient_hook_scope": True,
+            "intervention_hook_scope": True,
             "hybrid_cache_integrity": True,
             "downstream_state_changed": True,
             "reset_parity": True,
@@ -486,6 +515,9 @@ def summarize_smoke(
         "clean_gradient_cache_support_parity", "hybrid_cache_integrity",
         "downstream_state_changed", "reset_parity", "branch_isolation",
         "random_norm_match", "alternative_norm_ceiling",
+        "gradient_token_logit_parity", "gradient_total_support_parity",
+        "gradient_residual_parity", "gradient_finite_nonzero",
+        "gradient_hook_scope", "intervention_hook_scope",
     }
     for record in records:
         checks = record["checks"]

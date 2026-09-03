@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 import torch
 
@@ -54,9 +55,9 @@ class ActualQwenReplayIntegrationTests(unittest.TestCase):
         cls.adapter = QwenReplayAdapter(model, lens_model)
 
     def test_gradient_targeted_replay_and_hybrid_state_propagation(self) -> None:
-        post_answer = [1, 2, 3, 4, 5]
+        post_answer = [1, 2, 3, 4, 5, 6]
         question_prefix = [1, 2, 3]
-        answer = [4]
+        answer = [4, 5]
         bundle = compute_clean_gradients(
             self.adapter,
             post_answer,
@@ -89,6 +90,18 @@ class ActualQwenReplayIntegrationTests(unittest.TestCase):
             intervention=schedule,
         )
         self.assertAlmostEqual(clean.answer_sequence_logp, bundle.answer_sequence_logp, places=5)
+        self.assertEqual(bundle.parity["hook_positions"], [2, 3])
+        self.assertEqual(
+            bundle.parity["ordinary_reference_capture_hook_positions"], [2, 3]
+        )
+        self.assertEqual(bundle.parity["hook_calls_outside_declared_positions"], 0)
+        self.assertTrue(bundle.parity["per_token_logit_parity"])
+        self.assertTrue(bundle.parity["total_answer_support_parity"])
+        self.assertTrue(bundle.parity["intervention_layer_residual_parity"])
+        self.assertEqual(len(bundle.parity["per_token_logit_max_abs_differences"]), 2)
+        self.assertEqual(targeted.process_hook_positions, (2, 3))
+        self.assertEqual(targeted.process_hook_positions, targeted.intervention_positions)
+        self.assertEqual(clean.process_hook_positions, ())
         self.assertGreater(clean.answer_sequence_logp - targeted.answer_sequence_logp, 0)
         layer_types = self.adapter.text_config.layer_types
         assert_hybrid_cache_integrity(
@@ -103,7 +116,25 @@ class ActualQwenReplayIntegrationTests(unittest.TestCase):
             clean.cache_audit, targeted.cache_audit, process_layer=3
         )
 
+    def test_recurrent_gradient_logit_mismatch_fails_closed(self) -> None:
+        original_step = self.adapter.step
+
+        def mismatched_reference(*args, **kwargs):
+            logits, captures = original_step(*args, **kwargs)
+            changed = logits.clone()
+            changed[0] += 1.0
+            return changed, captures
+
+        with mock.patch.object(self.adapter, "step", side_effect=mismatched_reference):
+            with self.assertRaisesRegex(AssertionError, "per-token logit parity failed"):
+                compute_clean_gradients(
+                    self.adapter,
+                    [1, 2, 3, 4, 5],
+                    prefix_length=3,
+                    answer_token_ids=[4],
+                    process_layer=3,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
-

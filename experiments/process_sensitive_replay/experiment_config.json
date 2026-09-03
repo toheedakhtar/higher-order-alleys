@@ -68,6 +68,13 @@
     "relative_tolerance": 1e-5,
     "heldout_integrity_stride": 10
   },
+  "gradient_replay": {
+    "method": "differentiable_token_by_token_recurrent",
+    "reference": "ordinary_cached_token_by_token_recurrent",
+    "functionalize_cache_updates_only": true,
+    "parity_tolerance_source": "reset_parity",
+    "hook_scope": "answer_predictor_positions_only"
+  },
   "smoke": {
     "item_count": 4,
     "require_cuda_for_real_model": true

@@ -45,6 +45,14 @@ class ProtocolTests(unittest.TestCase):
             self.config["generation"]["canonical_assistant_turn_terminator"],
             "<|im_end|>",
         )
+        self.assertEqual(
+            self.config["gradient_replay"]["method"],
+            "differentiable_token_by_token_recurrent",
+        )
+        self.assertEqual(
+            self.config["gradient_replay"]["hook_scope"],
+            "answer_predictor_positions_only",
+        )
 
     def test_item_support_match_uses_absolute_target_and_requires_positive_drop(self) -> None:
         self.assertTrue(item_support_matched(1.0, 1.5))

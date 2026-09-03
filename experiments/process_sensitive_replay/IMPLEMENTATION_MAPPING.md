@@ -63,5 +63,21 @@ digests while at least one layer 32–63 must change. That is enforced directly.
 - An item that reaches the cap without a valid terminator is diagnostic-only
   and is excluded from both discovery and held-out splits.
 
+## Recurrent gradient compatibility correction
+
+- The former full-sequence, no-cache gradient route is not used: Qwen3.6 runs
+  its chunked delta-rule kernel there, whereas experimental replay runs the
+  one-token recurrent kernel.
+- Gradients are computed by the same token-by-token recurrent path as ordinary
+  replay. The gradient-only cache clones convolution storage before its
+  in-place update and replaces recurrent-state `copy_` with graph-preserving
+  assignment. No model equation or kernel is replaced.
+- An ordinary `DynamicCache` replay runs alongside the differentiable pass.
+  Every intended position must pass full-logit and layer-31 residual parity;
+  total answer support must also pass at the frozen `1e-5` tolerances.
+- Answer-support and entropy gradients must be finite and nonzero. Gradient
+  and intervention hooks must fire exactly at answer-predicting positions.
+  Any mismatch is fail-closed and logged with its numerical differences.
+
 The present CPU workspace can unit-test this infrastructure but has
 `torch==2.13.0+cpu`; real model phases are intentionally blocked here.

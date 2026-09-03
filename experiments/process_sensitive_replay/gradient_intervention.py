@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+import math
+import types
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 import torch
@@ -66,6 +68,8 @@ class GradientBundle:
     entropy_gradients: torch.Tensor
     clean_residuals: torch.Tensor
     clean_residual_norms: torch.Tensor
+    token_logprobs: tuple[float, ...] = ()
+    parity: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -116,51 +120,232 @@ def _model_logits(adapter: Any, final_hidden: torch.Tensor) -> torch.Tensor:
     return adapter.lm_head(final_hidden.to(adapter.lm_head.weight.device))
 
 
-def _objective_gradient(
+def _make_differentiable_recurrent_cache(adapter: Any) -> Any:
+    """Keep Qwen's recurrent kernels while replacing autograd-breaking state copies."""
+    cache = adapter.new_cache()
+    functionalized_layers = 0
+    for layer in cache.layers:
+        if not hasattr(layer, "recurrent_states"):
+            continue
+        functionalized_layers += 1
+
+        def functional_recurrent_update(
+            self: Any,
+            recurrent_states: torch.Tensor,
+            state_idx: int = 0,
+            **_kwargs: Any,
+        ) -> torch.Tensor:
+            if self.device is None:
+                self.dtype = recurrent_states.dtype
+                self.device = recurrent_states.device
+            self.recurrent_states[state_idx] = recurrent_states
+            self.is_recurrent_states_initialized[state_idx] = True
+            return recurrent_states
+
+        layer.update_recurrent_state = types.MethodType(functional_recurrent_update, layer)
+    if functionalized_layers == 0:
+        raise RuntimeError("Qwen hybrid cache exposes no recurrent layers to functionalize")
+    return cache
+
+
+def _clone_convolution_states_for_autograd(cache: Any) -> None:
+    """Give each recurrent step fresh conv storage before Qwen updates it in place."""
+    for layer in cache.layers:
+        states = getattr(layer, "conv_states", None)
+        if not isinstance(states, dict):
+            continue
+        for state_idx, value in tuple(states.items()):
+            if torch.is_tensor(value):
+                states[state_idx] = value.clone()
+
+
+def _max_relative_difference(first: torch.Tensor, second: torch.Tensor) -> float:
+    denominator = torch.maximum(first.abs(), second.abs()).clamp_min(1e-12)
+    return float(((first - second).abs() / denominator).max().item())
+
+
+def _recurrent_gradient_pass(
     adapter: Any,
     token_ids: torch.Tensor,
     predictor_positions: Sequence[int],
     answer_token_ids: Sequence[int],
     process_layer: int,
-    objective: str,
-) -> tuple[torch.Tensor, torch.Tensor, float]:
-    captured: dict[str, torch.Tensor] = {}
+    *,
+    atol: float,
+    rtol: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, float, tuple[float, ...], dict[str, Any]]:
+    positions = tuple(int(value) for value in predictor_positions)
+    targets = tuple(int(value) for value in answer_token_ids)
+    if len(positions) != len(targets) or not positions:
+        raise ValueError("predictor positions and answer tokens must be non-empty and aligned")
+    target_by_position = dict(zip(positions, targets, strict=True))
+    functional_cache = _make_differentiable_recurrent_cache(adapter)
+    reference_cache = adapter.new_cache()
+    roots: list[torch.Tensor] = []
+    residuals: list[torch.Tensor] = []
+    support_terms: list[torch.Tensor] = []
+    functional_logprob_values: list[float] = []
+    entropy_terms: list[torch.Tensor] = []
+    reference_logprobs: list[float] = []
+    hook_positions: list[int] = []
+    reference_capture_positions: list[int] = []
+    logit_max_abs_diffs: list[float] = []
+    logit_max_rel_diffs: list[float] = []
+    residual_max_abs_diffs: list[float] = []
+    residual_max_rel_diffs: list[float] = []
+    sequence = [int(value) for value in token_ids[0].tolist()]
 
-    def root_hook(_module: Any, _inputs: Any, output: Any) -> Any:
-        hidden = hidden_tensor(output)
-        if not hidden.requires_grad:
-            hidden.requires_grad_(True)
-        hidden.retain_grad()
-        captured["hidden"] = hidden
-        return output
+    # Later tokens cannot causally affect any answer logit. Stopping at the
+    # final predictor avoids retaining an unnecessary autograd graph.
+    for position, token_id in enumerate(sequence[: positions[-1] + 1]):
+        intended = position in target_by_position
+        captured: dict[str, torch.Tensor] = {}
+        handle = None
+        if intended:
+            _clone_convolution_states_for_autograd(functional_cache)
 
-    handle = adapter.layers[process_layer].register_forward_hook(root_hook)
-    try:
-        outputs = adapter.text_module(
-            input_ids=token_ids.to(adapter.input_device),
-            use_cache=False,
+            def root_hook(_module: Any, _inputs: Any, output: Any) -> Any:
+                hidden = hidden_tensor(output)
+                residuals.append(hidden[:, -1, :].detach().float().cpu())
+                root = hidden.detach().requires_grad_(True)
+                roots.append(root)
+                hook_positions.append(position)
+                captured["root"] = root
+                return replace_hidden(output, root)
+
+            handle = adapter.layers[process_layer].register_forward_hook(root_hook)
+        try:
+            inputs = torch.tensor([[token_id]], dtype=torch.long, device=adapter.input_device)
+            context = torch.enable_grad() if intended else torch.no_grad()
+            with context:
+                outputs = adapter.text_module(
+                    input_ids=inputs,
+                    past_key_values=functional_cache,
+                    use_cache=True,
+                )
+                functional_logits = _model_logits(
+                    adapter, outputs.last_hidden_state[:, -1, :]
+                ).float()[0]
+        finally:
+            if handle is not None:
+                handle.remove()
+        if adapter.cache_length(functional_cache) != position + 1:
+            raise AssertionError(
+                f"differentiable recurrent cache failed to advance at position {position}"
+            )
+
+        reference_logits, reference_captures = adapter.step(
+            token_id,
+            reference_cache,
+            expected_position=position,
+            capture_layers=(process_layer,) if intended else (),
         )
-        final_hidden = outputs.last_hidden_state[:, list(predictor_positions), :]
-        logits = _model_logits(adapter, final_hidden).float()
-        targets = torch.tensor(answer_token_ids, device=logits.device, dtype=torch.long)
-        log_probs = logits.log_softmax(dim=-1)
-        support = log_probs[0, torch.arange(len(targets), device=logits.device), targets].sum()
-        if objective == "support":
-            scalar = support
-        elif objective == "entropy":
-            probabilities = log_probs.exp()
-            scalar = -(probabilities * log_probs).sum(dim=-1).sum()
-        else:
-            raise ValueError(f"unknown objective {objective!r}")
-        root = captured.get("hidden")
-        if root is None:
-            raise RuntimeError("process-layer gradient hook did not fire")
-        gradient = torch.autograd.grad(scalar, root, retain_graph=False)[0]
-        selected_gradient = gradient[0, list(predictor_positions), :].detach().float().cpu()
-        selected_residual = root[0, list(predictor_positions), :].detach().float().cpu()
-        return selected_gradient, selected_residual, float(support.detach().item())
-    finally:
-        handle.remove()
+        if not intended:
+            continue
+        reference_capture_positions.append(position)
+        if "root" not in captured:
+            raise RuntimeError(f"gradient hook did not fire at intended position {position}")
+
+        observed_logits = functional_logits.detach()
+        expected_logits = reference_logits.to(observed_logits.device)
+        logit_abs = float((observed_logits - expected_logits).abs().max().item())
+        logit_rel = _max_relative_difference(observed_logits, expected_logits)
+        logit_max_abs_diffs.append(logit_abs)
+        logit_max_rel_diffs.append(logit_rel)
+        if not torch.allclose(observed_logits, expected_logits, atol=atol, rtol=rtol):
+            raise AssertionError(
+                "recurrent gradient per-token logit parity failed at "
+                f"position={position} max_abs={logit_abs:.9g} max_rel={logit_rel:.9g}"
+            )
+
+        observed_residual = residuals[-1].to(reference_captures[process_layer].device)
+        expected_residual = reference_captures[process_layer].float()
+        residual_abs = float((observed_residual - expected_residual).abs().max().item())
+        residual_rel = _max_relative_difference(observed_residual, expected_residual)
+        residual_max_abs_diffs.append(residual_abs)
+        residual_max_rel_diffs.append(residual_rel)
+        if not torch.allclose(observed_residual, expected_residual, atol=atol, rtol=rtol):
+            raise AssertionError(
+                "recurrent gradient intervention-layer residual parity failed at "
+                f"position={position} max_abs={residual_abs:.9g} max_rel={residual_rel:.9g}"
+            )
+
+        target = target_by_position[position]
+        functional_log_probs = functional_logits.log_softmax(dim=-1)
+        reference_log_probs = reference_logits.log_softmax(dim=-1)
+        support_terms.append(functional_log_probs[target])
+        functional_logprob_values.append(float(functional_log_probs[target].detach().item()))
+        reference_logprobs.append(float(reference_log_probs[target].item()))
+        probabilities = functional_log_probs.exp()
+        entropy_terms.append(-(probabilities * functional_log_probs).sum())
+
+    if tuple(hook_positions) != positions:
+        raise AssertionError(
+            f"gradient hook scope failed: expected {positions}, observed {tuple(hook_positions)}"
+        )
+    if tuple(reference_capture_positions) != positions:
+        raise AssertionError(
+            "ordinary cached reference hook scope failed: "
+            f"expected {positions}, observed {tuple(reference_capture_positions)}"
+        )
+    support = torch.stack(support_terms).sum()
+    entropy = torch.stack(entropy_terms).sum()
+    reference_support = float(sum(reference_logprobs))
+    support_value = float(sum(functional_logprob_values))
+    if not math.isclose(support_value, reference_support, abs_tol=atol, rel_tol=rtol):
+        raise AssertionError(
+            "recurrent gradient total answer-support parity failed: "
+            f"gradient={support_value:.9g} cached={reference_support:.9g} "
+            f"abs_diff={abs(support_value - reference_support):.9g}"
+        )
+
+    support_gradients = torch.autograd.grad(support, roots, retain_graph=True)
+    entropy_gradients = torch.autograd.grad(entropy, roots, retain_graph=False)
+    support_gradient = torch.stack(
+        [value[0, -1, :].detach().float().cpu() for value in support_gradients]
+    )
+    entropy_gradient = torch.stack(
+        [value[0, -1, :].detach().float().cpu() for value in entropy_gradients]
+    )
+    for name, gradient in (
+        ("answer-support", support_gradient),
+        ("entropy", entropy_gradient),
+    ):
+        norms = torch.linalg.vector_norm(gradient, dim=-1)
+        if not torch.isfinite(gradient).all() or bool((norms <= 1e-12).any()):
+            raise RuntimeError(
+                f"{name} gradient is non-finite or zero at an intended position"
+            )
+
+    parity = {
+        "method": "differentiable_token_by_token_recurrent",
+        "reference_method": "ordinary_cached_token_by_token_recurrent",
+        "atol": float(atol),
+        "rtol": float(rtol),
+        "hook_positions": list(hook_positions),
+        "ordinary_reference_capture_hook_positions": list(reference_capture_positions),
+        "hook_calls_outside_declared_positions": 0,
+        "per_token_logit_parity": True,
+        "total_answer_support_parity": True,
+        "intervention_layer_residual_parity": True,
+        "finite_nonzero_answer_gradients": True,
+        "finite_nonzero_entropy_gradients": True,
+        "reference_answer_sequence_logp": reference_support,
+        "gradient_answer_sequence_logp": support_value,
+        "support_absolute_difference": abs(support_value - reference_support),
+        "per_token_logit_max_abs_differences": logit_max_abs_diffs,
+        "per_token_logit_max_rel_differences": logit_max_rel_diffs,
+        "per_token_residual_max_abs_differences": residual_max_abs_diffs,
+        "per_token_residual_max_rel_differences": residual_max_rel_diffs,
+    }
+    return (
+        support_gradient,
+        entropy_gradient,
+        torch.cat(residuals, dim=0),
+        support_value,
+        tuple(reference_logprobs),
+        parity,
+    )
 
 
 def compute_clean_gradients(
@@ -170,19 +355,28 @@ def compute_clean_gradients(
     prefix_length: int,
     answer_token_ids: Sequence[int],
     process_layer: int,
+    atol: float = 1e-5,
+    rtol: float = 1e-5,
 ) -> GradientBundle:
     positions = answer_predictor_positions(prefix_length, len(answer_token_ids))
     ids = torch.tensor([list(post_answer_token_ids)], dtype=torch.long)
-    answer_gradient, residuals, support = _objective_gradient(
-        adapter, ids, positions, answer_token_ids, process_layer, "support"
+    adapter.hf_model.requires_grad_(False)
+    (
+        answer_gradient,
+        entropy_gradient,
+        residuals,
+        support,
+        token_logprobs,
+        parity,
+    ) = _recurrent_gradient_pass(
+        adapter,
+        ids,
+        positions,
+        answer_token_ids,
+        process_layer,
+        atol=float(atol),
+        rtol=float(rtol),
     )
-    entropy_gradient, entropy_residuals, entropy_support = _objective_gradient(
-        adapter, ids, positions, answer_token_ids, process_layer, "entropy"
-    )
-    if not torch.allclose(residuals, entropy_residuals, atol=0, rtol=0):
-        raise AssertionError("clean residuals changed between frozen gradient passes")
-    if abs(support - entropy_support) > 1e-5:
-        raise AssertionError("clean support changed between frozen gradient passes")
     if not torch.isfinite(torch.tensor(support)):
         raise RuntimeError("clean answer support is non-finite")
     gradient_norms = torch.linalg.vector_norm(answer_gradient, dim=-1)
@@ -196,6 +390,8 @@ def compute_clean_gradients(
         entropy_gradients=entropy_gradient,
         clean_residuals=residuals,
         clean_residual_norms=torch.linalg.vector_norm(residuals, dim=-1),
+        token_logprobs=token_logprobs,
+        parity=parity,
     )
 
 

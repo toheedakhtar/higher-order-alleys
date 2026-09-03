@@ -117,7 +117,7 @@ logits[q]     predict X₂
 logits[q+n-2] predict Xₙ
 ```
 
-A clean, no-cache gradient pass will compute:
+A differentiable token-by-token recurrent gradient pass will compute:
 
 ```text
 S = Σ log P(Xₜ | Q, X<t)
@@ -125,6 +125,18 @@ gᵢ = ∂S / ∂hᵢ
 ```
 
 where `hᵢ` is the layer-31 block output at each answer-predicting position.
+
+This gradient pass must use the same Qwen one-token recurrent kernels, token positions, and causal cache semantics as ordinary experimental replay. Only autograd-breaking cache mutations may be functionalized: convolution-state storage is cloned immediately before an in-place recurrent update, and recurrent-state `copy_` writes are replaced by graph-preserving assignment in the gradient-only cache. Model equations, kernels, tokens, intervention definitions, and the ordinary preserved-state cache are unchanged.
+
+The gradient hook is registered only for the declared answer-predicting positions. Before a gradient is accepted, the pass runs an ordinary cached replay alongside it and requires, at the existing `1e-5` absolute and relative tolerances:
+
+- full-vocabulary per-token logit parity at every intended position;
+- total answer-sequence support parity;
+- layer-31 residual-state parity at every intended position;
+- finite, nonzero answer-support and entropy gradients at every intended position;
+- an exact hook-position list with no activity outside the declared factual-answer positions.
+
+Every comparison and maximum absolute/relative difference is logged. Any failure halts the phase fail-closed. The earlier full-sequence no-cache gradient route is prohibited because Qwen3.6 selects a chunked delta-rule kernel there while experimental replay uses its recurrent kernel.
 
 The gradient and clean residual norms will then be detached and frozen. During sequential cached replay:
 
@@ -518,7 +530,9 @@ CPU tests will cover:
 
 The pre-discovery engineering smoke must prove all applicable infrastructure properties below without requiring a frozen beta. After discovery freezes the protocol, the post-freeze critical smoke must re-run the complete list and additionally prove frozen-beta support matching:
 
-- clean cached support matches the clean gradient pass;
+- recurrent gradient replay has per-token full-logit, total-support, and intervention-layer residual parity with ordinary cached replay at the frozen tolerance;
+- answer-support and entropy gradients are finite and nonzero at every intended position;
+- gradient and intervention hooks fire exactly at the declared factual-answer positions and nowhere else;
 - targeted support is reduced;
 - the alternative direction satisfies the frozen cosine threshold;
 - in post-freeze smoke, the alternative support drop approximately matches targeted strong on smoke items using the discovery-frozen beta;

@@ -128,6 +128,7 @@ class QwenReplayAdapter:
         self.input_device = lens_model.input_device
         self.text_config = hf_model.config.get_text_config()
         self.intervention_hook_registrations = 0
+        self.intervention_hook_positions: list[int] = []
         if len(self.layers) != int(self.text_config.num_hidden_layers):
             raise RuntimeError("J-Lens adapter/model layer count mismatch")
 
@@ -158,6 +159,7 @@ class QwenReplayAdapter:
         process_layer = None if intervention is None else intervention.process_layer
         if intervention is not None:
             self.intervention_hook_registrations += 1
+            self.intervention_hook_positions.append(int(expected_position))
         hook_layers = sorted(set(int(layer) for layer in capture_layers) | ({process_layer} if process_layer is not None else set()))
 
         def make_hook(layer: int):
@@ -209,6 +211,7 @@ class ReplayOutcome:
     answer_token_hash: str
     teacher_forced: bool
     intervention_positions: tuple[int, ...]
+    process_hook_positions: tuple[int, ...]
 
 
 def replay_teacher_forced(
@@ -227,6 +230,7 @@ def replay_teacher_forced(
     if complete[len(prefix) : len(prefix) + len(answer)] != answer:
         raise AssertionError("post-answer transcript does not contain canonical answer IDs")
     cache = adapter.new_cache()
+    hook_position_start = len(adapter.intervention_hook_positions)
     token_logprobs: list[float] = []
     targets_by_predictor = {
         len(prefix) - 1 + index: token_id for index, token_id in enumerate(answer)
@@ -236,7 +240,11 @@ def replay_teacher_forced(
             token_id,
             cache,
             expected_position=position,
-            intervention=intervention,
+            intervention=(
+                intervention
+                if intervention is not None and position in intervention.positions
+                else None
+            ),
         )
         if position in targets_by_predictor:
             target = targets_by_predictor[position]
@@ -247,6 +255,15 @@ def replay_teacher_forced(
         raise AssertionError("teacher-forced answer support is non-finite")
     if intervention is not None:
         intervention.assert_complete()
+    process_hook_positions = tuple(adapter.intervention_hook_positions[hook_position_start:])
+    expected_hook_positions = tuple(
+        () if intervention is None else sorted(intervention.positions)
+    )
+    if process_hook_positions != expected_hook_positions:
+        raise AssertionError(
+            "process hook scope failed: "
+            f"expected {expected_hook_positions}, observed {process_hook_positions}"
+        )
     return ReplayOutcome(
         cache=cache,
         cache_audit=audit_cache(cache),
@@ -256,7 +273,8 @@ def replay_teacher_forced(
         question_token_hash=hash_token_ids(prefix),
         answer_token_hash=hash_token_ids(answer),
         teacher_forced=True,
-        intervention_positions=tuple(() if intervention is None else sorted(intervention.positions)),
+        intervention_positions=expected_hook_positions,
+        process_hook_positions=process_hook_positions,
     )
 
 

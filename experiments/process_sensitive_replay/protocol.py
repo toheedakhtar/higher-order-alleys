@@ -122,6 +122,15 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
         or generation.get("canonical_assistant_turn_terminator") != "<|im_end|>"
     ):
         raise ValueError("frozen answer generation or turn-termination contract changed")
+    gradient_replay = config["gradient_replay"]
+    if gradient_replay != {
+        "method": "differentiable_token_by_token_recurrent",
+        "reference": "ordinary_cached_token_by_token_recurrent",
+        "functionalize_cache_updates_only": True,
+        "parity_tolerance_source": "reset_parity",
+        "hook_scope": "answer_predictor_positions_only",
+    }:
+        raise ValueError("frozen recurrent gradient replay contract changed")
     if len(dataset_rows) != int(config["dataset"]["expected_items"]):
         raise ValueError(f"expected 82 factual items, found {len(dataset_rows)}")
     counts: dict[str, int] = {}

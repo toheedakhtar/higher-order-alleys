@@ -478,7 +478,9 @@ def invalid_status(exc: BaseException) -> str:
         return "invalid_support_match"
     if "reset" in message:
         return "invalid_reset_parity"
-    if any(term in message for term in ("cache", "state", "storage", "branch", "hook")):
+    if any(term in message for term in (
+        "cache", "state", "storage", "branch", "hook", "gradient", "logit parity",
+    )):
         return "invalid_cache_state"
     return "failed"
 
