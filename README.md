@@ -7,6 +7,7 @@ Research code and artifacts for Jacobian-Lens experiments using Qwen3.6-27B.
 | Path | Purpose |
 | --- | --- |
 | `experiments/higher_v_readout_global/` | Runnable global-steering experiment and CPU tests |
+| `experiments/self_v_external/` | Matched SELF-versus-OTHER paired experiment |
 | `dataset/metacognition.csv` | The 90-row experiment dataset |
 | `assets/` | Parity exports and completed run artifacts |
 | `docs/` | Research context, migration notes, next-stage plan, and results |
@@ -25,16 +26,16 @@ and the unit tests do not download or load the model.
 ## Verify the project
 
 ```powershell
-uv run python -m unittest experiments.higher_v_readout_global.test_global_experiment
+uv run python -m unittest discover -s experiments -p "test*.py"
 uv run python -m experiments.higher_v_readout_global.runner --phase validate
+uv run python -m experiments.self_v_external.runner --phase validate
 ```
 
 ## Run the experiment
 
-See `experiments/higher_v_readout_global/README.md` for parity, pilot, full-run,
-resume, control, output-root, and analysis commands. Runs default to
-`experiments/higher_v_readout_global/results/`; override this with
-`--output-root PATH`.
+See each experiment's README for pilot, full-run, resume, output-root, and
+analysis commands. Runs default to that experiment's `results/` directory;
+override this with `--output-root PATH`.
 
 The documents in `docs/` include historical predecessor context. Current
 operational paths and commands are defined by this README and the experiment
