@@ -167,22 +167,32 @@ The safe single-GPU optimizations are therefore bounded-work optimizations:
 - phases remain separate processes so a completed phase cannot retain CUDA
   allocations in the next one.
 
-After the pinned model and lens are present in the selected Hugging Face cache,
-offline cache lookup can remove network metadata checks from each phase startup:
+After the pinned model and lens are present in the default Hugging Face cache,
+offline cache lookup can remove network metadata checks from each phase startup.
+First verify both directories exist:
 
-```powershell
-$env:HF_HUB_OFFLINE = "1"
-$env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
-python -m experiments.process_sensitive_replay.run_all_phases `
-  --profile quick `
-  --hf-cache-dir PATH_TO_EXISTING_CACHE `
+```bash
+test -d ~/.cache/huggingface/hub/models--Qwen--Qwen3.6-27B
+test -d ~/.cache/huggingface/hub/models--neuronpedia--jacobian-lens
+```
+
+Then run without an explicit cache argument so Hugging Face uses that default:
+
+```bash
+export HF_HUB_OFFLINE=1
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+python -m experiments.process_sensitive_replay.run_all_phases \
+  --profile quick \
   --run-dir assets/psr-quick-v2
 ```
 
 `HF_HUB_OFFLINE` should be set only after both pinned artifacts are already in
-that cache. `expandable_segments` can reduce allocator fragmentation; it does
-not change the measurements. Neither setting replaces the per-item CUDA memory
-gate.
+that cache. If either check fails, use `unset HF_HUB_OFFLINE` and run online to
+populate it. Never copy the placeholder text `PATH_TO_EXISTING_CACHE` or
+`/path/to/existing/cache` literally. `expandable_segments` can reduce allocator
+fragmentation; it does not change the measurements. Neither setting replaces
+the per-item CUDA memory gate. The launcher rejects a nonexistent explicit cache
+before starting phase 1 when offline mode is enabled.
 
 Do not enable concurrent phases, multiple item processes, ad-hoc batching,
 `torch.compile`, a different attention backend, or a lower precision inside a

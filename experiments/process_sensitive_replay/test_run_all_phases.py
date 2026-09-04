@@ -66,6 +66,17 @@ class RunAllPhasesTests(unittest.TestCase):
             SUPPORTED_PHASES[2],
         )
 
+    def test_offline_missing_explicit_cache_fails_before_campaign_start(self) -> None:
+        self.args.hf_cache_dir = Path("/path/to/existing/cache")
+        with (
+            mock.patch.dict("os.environ", {"HF_HUB_OFFLINE": "1"}),
+            mock.patch(
+                "experiments.process_sensitive_replay.run_all_phases.subprocess.run"
+            ) as run,
+        ):
+            self.assertEqual(run_campaign(self.args), 2)
+        run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

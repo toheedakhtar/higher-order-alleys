@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -51,6 +52,23 @@ def phase_command(args: argparse.Namespace, phase: str) -> list[str]:
 
 
 def run_campaign(args: argparse.Namespace) -> int:
+    offline = os.environ.get("HF_HUB_OFFLINE", "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+    if (
+        offline
+        and args.hf_cache_dir is not None
+        and not args.hf_cache_dir.is_dir()
+    ):
+        print(
+            "campaign not started: HF_HUB_OFFLINE is enabled but the explicit "
+            f"Hugging Face cache directory does not exist: {args.hf_cache_dir}. "
+            "Use the real populated cache path, omit --hf-cache-dir to use the "
+            "default cache, or unset HF_HUB_OFFLINE to allow downloads.",
+            file=sys.stderr,
+            flush=True,
+        )
+        return 2
     for index, phase in enumerate(SUPPORTED_PHASES, start=1):
         print(
             f"\n[{index}/{len(SUPPORTED_PHASES)}] starting phase={phase}",
