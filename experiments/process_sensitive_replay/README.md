@@ -84,6 +84,9 @@ Its reports are watermarked accordingly and cannot be presented as a substitute
 for the full confirmatory campaign. A quick and full campaign must always use
 different fresh run directories.
 
+For a detailed side-by-side comparison and interpretation guide, see
+[`docs/PROCESS_SENSITIVE_REPLAY_QUICK_VS_FULL.md`](../../docs/PROCESS_SENSITIVE_REPLAY_QUICK_VS_FULL.md).
+
 To run the complete campaign with automatic fail-closed phase sequencing, use:
 
 ```bash
