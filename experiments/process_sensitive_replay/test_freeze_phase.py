@@ -66,6 +66,7 @@ class FreezePhaseTests(unittest.TestCase):
             (smoke_dir / "smoke_report.json").write_text("{}\n", encoding="utf-8")
             (smoke_dir / "trial_summary.csv").write_text("item_id\n", encoding="utf-8")
             (smoke_dir / "candidate_scores.csv").write_text("item_id\n", encoding="utf-8")
+            (smoke_dir / "cuda_memory.jsonl").write_text("{}\n", encoding="utf-8")
             discovery_dir = run_dir / "discovery"
             discovery_dir.mkdir()
             for filename in (
@@ -78,6 +79,7 @@ class FreezePhaseTests(unittest.TestCase):
                 "candidate_metrics.pt",
                 "trial_summary.csv",
                 "candidate_scores.csv",
+                "cuda_memory.jsonl",
             ):
                 (discovery_dir / filename).write_bytes(filename.encode("utf-8"))
             directions = discovery_dir / "directions"
@@ -116,6 +118,9 @@ class FreezePhaseTests(unittest.TestCase):
             )
             hashes["discovery_candidate_scores"] = sha256_file(
                 discovery_dir / "candidate_scores.csv"
+            )
+            hashes["discovery_cuda_memory"] = sha256_file(
+                discovery_dir / "cuda_memory.jsonl"
             )
             candidate = {
                 "token_id": 123,

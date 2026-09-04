@@ -261,23 +261,26 @@ def measure_strength_grid_item(
     atol = float(config["reset_parity"]["absolute_tolerance"])
     rtol = float(config["reset_parity"]["relative_tolerance"])
     primary_layer = int(config["layers"]["process"])
-    bundle = compute_clean_gradients(
-        adapter,
-        answer["post_answer_token_ids"],
-        prefix_length=len(answer["question_prefix_token_ids"]),
-        answer_token_ids=answer["answer_token_ids"],
-        process_layer=primary_layer,
-        atol=atol,
-        rtol=rtol,
-    )
+    bundle = None
+    if "alpha" in family_set:
+        bundle = compute_clean_gradients(
+            adapter,
+            answer["post_answer_token_ids"],
+            prefix_length=len(answer["question_prefix_token_ids"]),
+            answer_token_ids=answer["answer_token_ids"],
+            process_layer=primary_layer,
+            atol=atol,
+            rtol=rtol,
+        )
     clean = _replay(adapter, answer, None)
-    if not math.isclose(
-        clean.answer_sequence_logp,
-        bundle.answer_sequence_logp,
-        abs_tol=atol,
-        rel_tol=rtol,
-    ):
-        raise AssertionError("discovery clean recurrent/cached support parity failed")
+    if bundle is not None:
+        if not math.isclose(
+            clean.answer_sequence_logp,
+            bundle.answer_sequence_logp,
+            abs_tol=atol,
+            rel_tol=rtol,
+        ):
+            raise AssertionError("discovery clean recurrent/cached support parity failed")
     if clean.process_hook_positions:
         raise AssertionError("discovery clean replay unexpectedly activated the process hook")
 
@@ -300,11 +303,14 @@ def measure_strength_grid_item(
             raise AssertionError("discovery strength grid produced non-finite support")
 
     validate_grid_outcome(clean)
+    clean.release_cache()
 
     alpha_grid: dict[str, Any] = {}
     beta_grid: dict[str, dict[str, Any]] = {}
     alternative_gradient_parity: dict[str, Any] = {}
     if "alpha" in family_set:
+        if bundle is None:
+            raise AssertionError("alpha discovery is missing its primary gradient bundle")
         for alpha_value in config["strengths"]["alpha_grid"]:
             alpha = float(alpha_value)
             schedule = _schedule(
@@ -324,6 +330,7 @@ def measure_strength_grid_item(
                 "cache_digest": outcome.cache_audit.digest,
                 "positions": _position_measurements(schedule),
             }
+            outcome.release_cache()
     if "beta" in family_set:
         for alternative_layer_value in config["layers"]["alternative_candidates"]:
             alternative_layer = int(alternative_layer_value)
@@ -373,6 +380,7 @@ def measure_strength_grid_item(
                     "cache_digest": outcome.cache_audit.digest,
                     "positions": _position_measurements(schedule),
                 }
+                outcome.release_cache()
 
     return {
         "item_id": item_id,
@@ -381,7 +389,7 @@ def measure_strength_grid_item(
         "transcript_hash": clean.transcript_hash,
         "question_token_hash": clean.question_token_hash,
         "answer_token_hash": clean.answer_token_hash,
-        "gradient_parity": bundle.parity,
+        "gradient_parity": None if bundle is None else bundle.parity,
         "alternative_gradient_parity": alternative_gradient_parity,
         "alpha_grid": alpha_grid,
         "beta_grid": beta_grid,

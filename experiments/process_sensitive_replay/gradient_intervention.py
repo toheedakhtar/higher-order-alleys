@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import math
-import types
+import weakref
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 import torch
+
+from .cache_state import release_cache_storage
 
 
 def hidden_tensor(output: Any) -> torch.Tensor:
@@ -128,20 +130,28 @@ def _make_differentiable_recurrent_cache(adapter: Any) -> Any:
             continue
         functionalized_layers += 1
 
+        layer_ref = weakref.ref(layer)
+
         def functional_recurrent_update(
-            self: Any,
             recurrent_states: torch.Tensor,
             state_idx: int = 0,
+            _layer_ref: Any = layer_ref,
             **_kwargs: Any,
         ) -> torch.Tensor:
-            if self.device is None:
-                self.dtype = recurrent_states.dtype
-                self.device = recurrent_states.device
-            self.recurrent_states[state_idx] = recurrent_states
-            self.is_recurrent_states_initialized[state_idx] = True
+            current_layer = _layer_ref()
+            if current_layer is None:
+                raise RuntimeError("functional recurrent cache layer was released early")
+            if current_layer.device is None:
+                current_layer.dtype = recurrent_states.dtype
+                current_layer.device = recurrent_states.device
+            current_layer.recurrent_states[state_idx] = recurrent_states
+            current_layer.is_recurrent_states_initialized[state_idx] = True
             return recurrent_states
 
-        layer.update_recurrent_state = types.MethodType(functional_recurrent_update, layer)
+        # An ordinary function stored on an instance is not descriptor-bound.
+        # The weak reference avoids a layer -> bound method -> layer cycle that
+        # can retain an entire recurrent autograd graph between items.
+        layer.update_recurrent_state = functional_recurrent_update
     if functionalized_layers == 0:
         raise RuntimeError("Qwen hybrid cache exposes no recurrent layers to functionalize")
     return cache
@@ -324,13 +334,18 @@ def _recurrent_gradient_pass(
         "per_token_residual_max_abs_differences": residual_max_abs_diffs,
         "per_token_residual_max_rel_differences": residual_max_rel_diffs,
     }
-    return (
+    result = (
         support_gradient,
         torch.cat(residuals, dim=0),
         support_value,
         tuple(reference_logprobs),
         parity,
     )
+    # Every returned tensor is already detached onto CPU. Release both GPU
+    # caches deterministically after the parity and gradient checks finish.
+    release_cache_storage(functional_cache)
+    release_cache_storage(reference_cache)
+    return result
 
 
 def compute_clean_gradients(

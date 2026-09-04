@@ -94,6 +94,11 @@
     "item_count": 4,
     "require_cuda_for_real_model": true
   },
+  "cuda_memory": {
+    "max_post_cleanup_growth_mib": 1024,
+    "minimum_trend_step_mib": 128,
+    "consecutive_growth_items": 2
+  },
   "meta_branches": {
     "correctness": {
       "prompt": "Was the factual answer you just gave CORRECT or INCORRECT? Reply exactly CORRECT or INCORRECT.",

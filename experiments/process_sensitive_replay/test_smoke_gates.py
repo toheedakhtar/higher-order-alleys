@@ -91,6 +91,12 @@ class SmokeGateTests(unittest.TestCase):
                 directory.mkdir(parents=True, exist_ok=True)
                 (directory / "candidate_scores.csv").write_text("item_id\n", encoding="utf-8")
 
+            def run_cuda_stub(_guard, memory_path, _hashes, **kwargs):
+                memory_path.parent.mkdir(parents=True, exist_ok=True)
+                with memory_path.open("a", encoding="utf-8") as handle:
+                    handle.write("{}\n")
+                return kwargs["operation"]()
+
             with (
                 patch(
                     "experiments.process_sensitive_replay.runner._load_campaign_inputs",
@@ -115,6 +121,10 @@ class SmokeGateTests(unittest.TestCase):
                 patch(
                     "experiments.process_sensitive_replay.runner.run_smoke_item",
                     side_effect=records,
+                ),
+                patch(
+                    "experiments.process_sensitive_replay.runner.run_cuda_item",
+                    side_effect=run_cuda_stub,
                 ),
                 patch("experiments.process_sensitive_replay.runner._log_smoke_record"),
                 patch(

@@ -692,6 +692,33 @@ write a phase-success marker. Discovery may start only after pre-discovery
 engineering smoke passes. Held-out may start only after post-freeze critical
 smoke passes fail-closed.
 
+### Authorized CUDA-lifetime execution correction (`psr-v9`)
+
+The `psr-v8` CUDA discovery run completed the alpha grid and 12/16 beta-grid
+items, then exhausted a 94.97-GiB GPU while 90.92 GiB remained allocated by
+PyTorch. This is an engineering failure; it produced no frozen protocol and
+does not alter the scientific design. `psr-v9` therefore preserves the exact
+alpha and beta grids and every scientific threshold while applying only these
+execution corrections:
+
+- beta-only measurement does not recompute the unused primary-layer gradient;
+- each alternative-layer gradient is still computed once per item and reused
+  for every declared beta;
+- disposable replay, branch, scoring, generation, and recurrent-gradient
+  caches are explicitly released after their audits are consumed;
+- the functional recurrent-cache override uses no self-retaining bound-method
+  cycle;
+- every smoke, discovery, candidate, and held-out item records post-cleanup
+  allocated/reserved and peak CUDA memory in a phase-local, hash-bound
+  `cuda_memory.jsonl`;
+- after cleanup, allocation growth greater than 1024 MiB above baseline, with
+  steps of at least 128 MiB across two consecutive items, halts fail-closed as
+  a CUDA-memory/state-lifetime failure.
+
+No adaptive beta search, grid pruning, threshold relaxation, or partial-campaign
+resume is permitted. `psr-v8` remains failed diagnostics; execution restarts in
+a fresh `psr-v9` campaign.
+
 ## Results interpretation
 
 The reporting layer will distinguish gate-invalid diagnostics from valid-campaign conclusions. If any critical gate fails, the campaign is marked invalid and only the corresponding diagnostic report is emitted. The substantive outcomes below are considered only when the support-match, reset-parity, and cache/state-integrity gates all pass:

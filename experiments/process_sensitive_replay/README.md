@@ -2,6 +2,8 @@
 
 This package implements the fail-closed runner for the frozen protocol in
 [`docs/PROCESS_SENSITIVE_REPLAY_IMPLEMENTATION_PLAN.md`](../../docs/PROCESS_SENSITIVE_REPLAY_IMPLEMENTATION_PLAN.md).
+The chronological engineering and scientific gate record is maintained in
+[`docs/PROCESS_SENSITIVE_REPLAY_FAILURE_HISTORY.md`](../../docs/PROCESS_SENSITIVE_REPLAY_FAILURE_HISTORY.md).
 
 The scientific comparison keeps the factual question, teacher-forced answer,
 Turn-3 prompts, and tokenizer IDs identical while varying only the hidden
@@ -41,19 +43,32 @@ must all run in the same unchanged CUDA environment.
 
 ## CUDA-host sequence
 
-The original `assets/psr` through `assets/psr-v7` campaigns are retained as
-diagnostics. `psr-v7` passed engineering smoke and alpha calibration but its
-same-layer entropy/orthogonal alternative failed the paired support-match gate.
-`psr-v8` keeps every support threshold and instead uses the identical
-answer-support-reducing objective at one layer selected from the predeclared
-full-attention set `{15, 19, 23}`. Each targeted mechanism has its own
-same-layer norm-matched random control. Start a fresh `assets/psr-v8` campaign
-on the same CUDA host:
+The original `assets/psr` through `assets/psr-v8` campaigns are retained as
+diagnostics. `psr-v7` failed the paired support-match gate for its same-layer
+entropy/orthogonal alternative. `psr-v8` introduced the different-layer,
+same-objective alternative but accumulated live CUDA allocations during its
+beta grid and failed with OOM after 12/16 items. `psr-v9` keeps the complete
+`psr-v8` scientific grid and every threshold unchanged while fixing cache
+lifetime, removing a redundant primary-gradient pass, and enforcing hash-bound
+per-item CUDA-memory logging. Start a fresh `assets/psr-v9` campaign on the same
+CUDA host:
+
+To run the complete campaign with automatic fail-closed phase sequencing, use:
 
 ```bash
-python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v8
-python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v8
-python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v8
+python -m experiments.process_sensitive_replay.run_all_phases --run-dir assets/psr-v9
+```
+
+The launcher starts each phase in a separate process, stops on the first
+nonzero exit, and never starts a later phase after a failed gate. An optional
+shared Hugging Face cache can be forwarded with `--hf-cache-dir PATH`.
+
+The equivalent individual commands are:
+
+```bash
+python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v9
+python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v9
+python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v9
 ```
 
 The pre-discovery smoke validates replay/token parity, hybrid state cloning,
@@ -68,11 +83,11 @@ transcript token hashes are exact critical gates.
 After pre-discovery smoke passes, run discovery and freeze in order:
 
 ```bash
-python -m experiments.process_sensitive_replay.runner --phase discovery --run-dir assets/psr-v8
-python -m experiments.process_sensitive_replay.runner --phase freeze --run-dir assets/psr-v8
-python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v8
-python -m experiments.process_sensitive_replay.runner --phase heldout --run-dir assets/psr-v8
-python -m experiments.process_sensitive_replay.runner --phase analyze --run-dir assets/psr-v8
+python -m experiments.process_sensitive_replay.runner --phase discovery --run-dir assets/psr-v9
+python -m experiments.process_sensitive_replay.runner --phase freeze --run-dir assets/psr-v9
+python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v9
+python -m experiments.process_sensitive_replay.runner --phase heldout --run-dir assets/psr-v9
+python -m experiments.process_sensitive_replay.runner --phase analyze --run-dir assets/psr-v9
 ```
 
 Discovery uses only the 16 IDs in `split_manifest.json`. It completes the alpha

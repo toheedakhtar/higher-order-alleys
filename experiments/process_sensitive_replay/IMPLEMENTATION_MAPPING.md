@@ -73,6 +73,25 @@ layer/global-beta pair without J-space, confidence, correctness, or held-out
 inputs. Both the primary and alternative mechanisms have distinct exact
 same-layer norm-matched random controls.
 
+The first CUDA execution of that design, `psr-v8`, exhausted a 94.97-GiB GPU
+after completing 12/16 beta-grid items. The allocated-memory trajectory showed
+live state accumulation rather than an intrinsically oversized single trial.
+The engineering-only `psr-v9` correction preserves the exact alpha/beta grids,
+selection rules, conditions, prompts, splits, and gates. It removes the
+unneeded primary-layer gradient computation from beta-only measurement,
+releases disposable replay/cache objects deterministically, and replaces the
+temporary recurrent-cache bound-method override with a weak-reference function
+so cache layers cannot retain their own autograd graph through a reference
+cycle.
+
+Every smoke, discovery, candidate, and held-out item now writes allocated,
+reserved, peak, baseline, step, and total CUDA bytes to phase-local
+`cuda_memory.jsonl`. After garbage
+collection and `empty_cache`, the run fails closed if post-cleanup allocation
+exceeds its baseline by more than 1024 MiB while rising by at least 128 MiB for
+two consecutive items. These engineering thresholds and each completed
+memory-log artifact participate in configuration/phase hashes.
+
 Discovery and freeze are now executable. Discovery performs the complete
 16-item alpha grid and freezes weak/strong alpha before beginning the separate
 16-item beta calibration. It then reruns those same discovery IDs with the

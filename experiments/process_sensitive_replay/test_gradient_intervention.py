@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import types
 
 import torch
 
@@ -11,6 +12,7 @@ from experiments.process_sensitive_replay.gradient_intervention import (
     build_interventions,
     cosine,
     deterministic_seed,
+    _make_differentiable_recurrent_cache,
 )
 
 
@@ -76,6 +78,26 @@ class GradientInterventionTests(unittest.TestCase):
             schedule.assert_complete()
         self.assertIsNotNone(schedule.delta_for(5))
         schedule.assert_complete()
+
+    def test_functional_cache_override_does_not_bind_layer_to_itself(self) -> None:
+        class Layer:
+            pass
+
+        layer = Layer()
+        layer.recurrent_states = {}
+        layer.is_recurrent_states_initialized = {}
+        layer.device = None
+        layer.dtype = None
+        adapter = types.SimpleNamespace(
+            new_cache=lambda: types.SimpleNamespace(layers=[layer])
+        )
+        cache = _make_differentiable_recurrent_cache(adapter)
+        self.assertIsNone(getattr(cache.layers[0].update_recurrent_state, "__self__", None))
+        value = torch.ones(2)
+        returned = cache.layers[0].update_recurrent_state(value, state_idx=3)
+        self.assertIs(returned, value)
+        self.assertIs(cache.layers[0].recurrent_states[3], value)
+        self.assertTrue(cache.layers[0].is_recurrent_states_initialized[3])
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ import socket
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import torch
 
@@ -26,6 +26,7 @@ from experiments.higher_v_readout_global.steering import (
 )
 
 from .answer_bank import discover_answer
+from .cuda_memory import CudaMemoryTrendGuard
 from .analysis import (
     analyze_candidate_effects,
     generate_required_plots,
@@ -120,6 +121,42 @@ def append_jsonl(path: Path, payload: Mapping[str, Any]) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(dict(payload), ensure_ascii=False, default=str) + "\n")
         handle.flush()
+
+
+def run_cuda_item(
+    guard: CudaMemoryTrendGuard,
+    memory_path: Path,
+    hashes: dict[str, str],
+    *,
+    hash_name: str,
+    phase: str,
+    stage: str,
+    item_id: str,
+    operation: Callable[[], Any],
+) -> Any:
+    """Run one item, then reclaim, log, and enforce CUDA memory lifetime."""
+    guard.begin_item()
+    try:
+        result = operation()
+    except BaseException as exc:
+        measurement = guard.finish_item(
+            phase=phase,
+            stage=stage,
+            item_id=item_id,
+            operation_error=exc,
+        )
+        append_jsonl(memory_path, {"timestamp": utc_now(), **measurement})
+        hashes[hash_name] = sha256_file(memory_path)
+        raise
+    measurement = guard.finish_item(
+        phase=phase,
+        stage=stage,
+        item_id=item_id,
+    )
+    append_jsonl(memory_path, {"timestamp": utc_now(), **measurement})
+    hashes[hash_name] = sha256_file(memory_path)
+    guard.assert_passed(measurement)
+    return result
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -598,6 +635,9 @@ def _load_pre_discovery_smoke_hash(run_dir: Path, hashes: dict[str, str]) -> Non
     hashes["pre_discovery_smoke_candidate_scores"] = sha256_file(
         directory / "candidate_scores.csv"
     )
+    hashes["pre_discovery_smoke_cuda_memory"] = sha256_file(
+        directory / "cuda_memory.jsonl"
+    )
 
 
 def _load_post_freeze_smoke_hash(run_dir: Path, hashes: dict[str, str]) -> None:
@@ -609,6 +649,9 @@ def _load_post_freeze_smoke_hash(run_dir: Path, hashes: dict[str, str]) -> None:
     )
     hashes["post_freeze_smoke_candidate_scores"] = sha256_file(
         directory / "candidate_scores.csv"
+    )
+    hashes["post_freeze_smoke_cuda_memory"] = sha256_file(
+        directory / "cuda_memory.jsonl"
     )
 
 
@@ -627,6 +670,7 @@ def _load_heldout_hashes(run_dir: Path, hashes: dict[str, str]) -> None:
             run_dir / "heldout" / "support_match_diagnostic.png",
         ),
         ("heldout_effects", run_dir / "heldout_effects.csv"),
+        ("heldout_cuda_memory", run_dir / "heldout" / "cuda_memory.jsonl"),
     ):
         hashes[name] = sha256_file(path)
 
@@ -644,6 +688,7 @@ def _load_discovery_hashes(run_dir: Path, hashes: dict[str, str]) -> None:
         ("discovery_trial_summary", "trial_summary.csv"),
         ("discovery_candidate_scores", "candidate_scores.csv"),
         ("candidate_discovery", "candidate_discovery.json"),
+        ("discovery_cuda_memory", "cuda_memory.jsonl"),
     ):
         hashes[name] = sha256_file(discovery_dir / filename)
 
@@ -878,15 +923,18 @@ def run_discovery_phase(
     beta_path = discovery_dir / "beta_grid.jsonl"
     beta_diagnostics_path = discovery_dir / "beta_grid_diagnostics.json"
     strength_path = discovery_dir / "strength_grid.jsonl"
+    memory_path = discovery_dir / "cuda_memory.jsonl"
     for path in (
         alpha_path,
         alpha_diagnostics_path,
         beta_path,
         beta_diagnostics_path,
         strength_path,
+        memory_path,
     ):
         if path.exists() and path.stat().st_size:
             raise RuntimeError(f"discovery diagnostic artifact already contains data: {path}")
+    memory_guard = CudaMemoryTrendGuard.from_config(config)
     alpha_records: list[dict[str, Any]] = []
     for item_id in discovery_ids:
         append_jsonl(run_dir / "events.jsonl", {
@@ -894,8 +942,17 @@ def run_discovery_phase(
             "event_type": "discovery_alpha_grid_started",
             "item_id": item_id,
         })
-        alpha_record = measure_strength_grid_item(
-            adapter, by_id[item_id], config, families=("alpha",)
+        alpha_record = run_cuda_item(
+            memory_guard,
+            memory_path,
+            hashes,
+            hash_name="discovery_cuda_memory",
+            phase=phase,
+            stage="alpha_grid",
+            item_id=item_id,
+            operation=lambda item_id=item_id: measure_strength_grid_item(
+                adapter, by_id[item_id], config, families=("alpha",)
+            ),
         )
         alpha_records.append(alpha_record)
         append_jsonl(alpha_path, alpha_record)
@@ -932,8 +989,17 @@ def run_discovery_phase(
             "item_id": item_id,
             "frozen_strong_alpha": alpha_selection["strong_alpha"],
         })
-        beta_record = measure_strength_grid_item(
-            adapter, by_id[item_id], config, families=("beta",)
+        beta_record = run_cuda_item(
+            memory_guard,
+            memory_path,
+            hashes,
+            hash_name="discovery_cuda_memory",
+            phase=phase,
+            stage="alternative_layer_beta_grid",
+            item_id=item_id,
+            operation=lambda item_id=item_id: measure_strength_grid_item(
+                adapter, by_id[item_id], config, families=("beta",)
+            ),
         )
         beta_records.append(beta_record)
         append_jsonl(beta_path, beta_record)
@@ -978,7 +1044,7 @@ def run_discovery_phase(
             ],
             "gradient_parity": {
                 "alpha_pass": alpha_record["gradient_parity"],
-                "beta_pass": beta_record["gradient_parity"],
+                "alternative_layers": beta_record["alternative_gradient_parity"],
             },
         }
         strength_records.append(record)
@@ -1045,6 +1111,7 @@ def run_discovery_phase(
     hashes["discovery_beta_grid"] = sha256_file(beta_path)
     hashes["discovery_beta_diagnostics"] = sha256_file(beta_diagnostics_path)
     hashes["discovery_strength_grid"] = sha256_file(strength_path)
+    hashes["discovery_cuda_memory"] = sha256_file(memory_path)
     strength_selection = select_discovery_strengths(strength_records, config)
     if strength_selection["alpha"] != alpha_selection:
         raise AssertionError("beta calibration changed the frozen alpha selection")
@@ -1075,16 +1142,25 @@ def run_discovery_phase(
             "event_type": "candidate_discovery_trial_started",
             "item_id": item_id,
         })
-        record = run_smoke_item(
-            adapter,
-            lens_model,
-            lens,
-            tokenizer,
-            by_id[item_id],
-            config,
-            phase="discovery",
-            frozen_protocol=selected_strengths,
-            include_full_vocab=True,
+        record = run_cuda_item(
+            memory_guard,
+            memory_path,
+            hashes,
+            hash_name="discovery_cuda_memory",
+            phase=phase,
+            stage="candidate_replay",
+            item_id=item_id,
+            operation=lambda item_id=item_id: run_smoke_item(
+                adapter,
+                lens_model,
+                lens,
+                tokenizer,
+                by_id[item_id],
+                config,
+                phase="discovery",
+                frozen_protocol=selected_strengths,
+                include_full_vocab=True,
+            ),
         )
         vocab_rows.append(_extract_discovery_vocab_tensor(record, config))
         support_rows.append(_candidate_support_row(
@@ -1225,6 +1301,7 @@ def run_discovery_phase(
     hashes["discovery_candidate_scores"] = sha256_file(
         discovery_dir / "candidate_scores.csv"
     )
+    hashes["discovery_cuda_memory"] = sha256_file(memory_path)
     discovery_payload = {
         "schema_version": 1,
         "experiment_name": "process_sensitive_replay",
@@ -1381,17 +1458,37 @@ def run_smoke_phase(
     phase_dir = run_dir / phase
     phase_dir.mkdir(parents=True, exist_ok=True)
     trials_path = phase_dir / "trials.jsonl"
-    if trials_path.exists() and trials_path.stat().st_size:
-        raise RuntimeError(f"{phase} trials already contain data; start a new campaign")
+    memory_path = phase_dir / "cuda_memory.jsonl"
+    for path in (trials_path, memory_path):
+        if path.exists() and path.stat().st_size:
+            raise RuntimeError(
+                f"{phase} diagnostic artifact already contains data: {path}"
+            )
+    memory_guard = CudaMemoryTrendGuard.from_config(config)
     records = []
     for item_id in item_ids:
         append_jsonl(run_dir / "events.jsonl", {
             "timestamp": utc_now(), "event_type": "smoke_trial_started",
             "phase": phase, "item_id": item_id,
         })
-        record = run_smoke_item(
-            adapter, lens_model, lens, tokenizer, by_id[str(item_id)], config,
-            phase=phase, frozen_protocol=frozen,
+        record = run_cuda_item(
+            memory_guard,
+            memory_path,
+            hashes,
+            hash_name=f"{phase}_cuda_memory",
+            phase=phase,
+            stage="smoke_replay",
+            item_id=str(item_id),
+            operation=lambda item_id=item_id: run_smoke_item(
+                adapter,
+                lens_model,
+                lens,
+                tokenizer,
+                by_id[str(item_id)],
+                config,
+                phase=phase,
+                frozen_protocol=frozen,
+            ),
         )
         records.append(record)
         append_jsonl(trials_path, record)
@@ -1413,6 +1510,7 @@ def run_smoke_phase(
     hashes[f"{phase}_candidate_scores"] = sha256_file(
         phase_dir / "candidate_scores.csv"
     )
+    hashes[f"{phase}_cuda_memory"] = sha256_file(memory_path)
     if report.get("passed") is not True:
         raise PhaseGateFailure(
             "invalid_support_match",
@@ -1466,8 +1564,13 @@ def run_heldout_phase(
 
     heldout_dir = run_dir / phase
     trials_path = heldout_dir / "trials.jsonl"
-    if trials_path.exists() and trials_path.stat().st_size:
-        raise RuntimeError("held-out trials already contain data; start a new campaign")
+    memory_path = heldout_dir / "cuda_memory.jsonl"
+    for path in (trials_path, memory_path):
+        if path.exists() and path.stat().st_size:
+            raise RuntimeError(
+                f"held-out diagnostic artifact already contains data: {path}"
+            )
+    memory_guard = CudaMemoryTrendGuard.from_config(config)
     records: list[dict[str, Any]] = []
     for item_id in heldout_ids:
         append_jsonl(run_dir / "events.jsonl", {
@@ -1475,15 +1578,24 @@ def run_heldout_phase(
             "event_type": "heldout_trial_started",
             "item_id": item_id,
         })
-        record = run_smoke_item(
-            adapter,
-            lens_model,
-            lens,
-            tokenizer,
-            by_id[item_id],
-            config,
+        record = run_cuda_item(
+            memory_guard,
+            memory_path,
+            hashes,
+            hash_name="heldout_cuda_memory",
             phase=phase,
-            frozen_protocol=frozen,
+            stage="heldout_replay",
+            item_id=item_id,
+            operation=lambda item_id=item_id: run_smoke_item(
+                adapter,
+                lens_model,
+                lens,
+                tokenizer,
+                by_id[item_id],
+                config,
+                phase=phase,
+                frozen_protocol=frozen,
+            ),
         )
         records.append(record)
         append_jsonl(trials_path, record)
@@ -1530,6 +1642,7 @@ def run_heldout_phase(
         "heldout_support_match": sha256_file(support_path),
         "heldout_support_match_summary": sha256_file(support_summary_path),
         "heldout_support_match_plot": sha256_file(support_plot_path),
+        "heldout_cuda_memory": sha256_file(memory_path),
     })
     if not matching["passed"]:
         raise RuntimeError("support_match_gate_failed on held-out data")
@@ -1826,7 +1939,7 @@ def invalid_status(exc: BaseException) -> str:
     if any(term in message for term in (
         "cache", "state", "storage", "branch", "hook", "gradient", "logit parity",
         "turn-3", "prefix-suffix", "factual prefix", "transcript token parity",
-        "non-finite", "j-lens", "replay produced",
+        "non-finite", "j-lens", "replay produced", "cuda_memory", "cuda memory",
     )):
         return "invalid_cache_state"
     return "failed"

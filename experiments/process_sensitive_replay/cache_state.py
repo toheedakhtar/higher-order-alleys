@@ -67,6 +67,40 @@ def cache_tensors(cache: Any) -> list[tuple[str, torch.Tensor]]:
     return list(_walk_tensors(cache, "cache", set()))
 
 
+def release_cache_storage(cache: Any) -> None:
+    """Release tensor owners from a hybrid cache that will never be reused.
+
+    This must only be called after all cache integrity and digest checks have
+    completed.  It makes replay lifetime explicit instead of waiting for
+    Python's cyclic garbage collector to notice large CUDA state tensors.
+    """
+    if cache is None:
+        return
+    layers = getattr(cache, "layers", None)
+    if layers is None:
+        return
+    for layer in tuple(layers):
+        # Functional recurrent passes temporarily shadow this class method on
+        # the cache instance. Remove that override before dropping its states.
+        if "update_recurrent_state" in getattr(layer, "__dict__", {}):
+            delattr(layer, "update_recurrent_state")
+        for name in (
+            "conv_states",
+            "recurrent_states",
+            "is_conv_states_initialized",
+            "is_recurrent_states_initialized",
+            "has_previous_state",
+        ):
+            value = getattr(layer, name, None)
+            if isinstance(value, dict):
+                value.clear()
+        for name in ("keys", "values"):
+            if torch.is_tensor(getattr(layer, name, None)):
+                setattr(layer, name, None)
+    if isinstance(layers, list):
+        layers.clear()
+
+
 def clone_hybrid_cache(cache: Any) -> Any:
     """Deep-copy every cache tensor; fail if any storage remains shared."""
     cloned = copy.deepcopy(cache)

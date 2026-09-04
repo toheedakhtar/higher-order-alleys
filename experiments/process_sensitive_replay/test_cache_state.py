@@ -12,6 +12,7 @@ from experiments.process_sensitive_replay.cache_state import (
     assert_storage_disjoint,
     audit_cache,
     clone_hybrid_cache,
+    release_cache_storage,
 )
 
 
@@ -119,6 +120,12 @@ class CacheStateTests(unittest.TestCase):
             assert_process_propagated(
                 audit_cache(clean_cache), audit_cache(changed_cache), process_layer=1
             )
+
+    def test_disposable_cache_storage_is_released(self) -> None:
+        source = fake_cache()
+        source.layers[1].update_recurrent_state = lambda value: value
+        release_cache_storage(source)
+        self.assertEqual(source.layers, [])
 
 
 if __name__ == "__main__":

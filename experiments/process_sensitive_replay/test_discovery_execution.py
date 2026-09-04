@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 import torch
 
@@ -8,6 +10,7 @@ from experiments.process_sensitive_replay.discovery import (
     DISCOVERY_CANDIDATE_CONDITIONS,
     alpha_grid_diagnostics,
     candidate_ranking_row,
+    measure_strength_grid_item,
     rank_candidate_grid,
     select_discovery_strengths,
     select_discovery_alpha,
@@ -137,6 +140,78 @@ class DiscoveryExecutionTests(unittest.TestCase):
                 eligible_token_ids=[2, 3],
                 config=self.config,
             )
+
+    def test_beta_only_grid_does_not_recompute_primary_gradient(self) -> None:
+        called_layers = []
+
+        def gradient_bundle(*_args, process_layer, **_kwargs):
+            called_layers.append(process_layer)
+            return SimpleNamespace(
+                process_layer=process_layer,
+                answer_sequence_logp=-2.0,
+                parity={"layer": process_layer},
+            )
+
+        class Outcome(SimpleNamespace):
+            def release_cache(self):
+                self.cache = None
+
+        def replay(*_args, **_kwargs):
+            return Outcome(
+                cache=object(),
+                cache_audit=SimpleNamespace(
+                    digest="digest", layer_digests=("a",) * 64
+                ),
+                answer_sequence_logp=-2.0,
+                process_hook_positions=(),
+                transcript_hash="transcript",
+                question_token_hash="question",
+                answer_token_hash="answer",
+            )
+
+        adapter = SimpleNamespace(
+            text_config=SimpleNamespace(layer_types=["full_attention"] * 64)
+        )
+        answer = {
+            "item_id": "x",
+            "invalid": False,
+            "post_answer_token_ids": [1, 2, 3],
+            "question_prefix_token_ids": [1, 2],
+            "answer_token_ids": [3],
+        }
+        with (
+            mock.patch(
+                "experiments.process_sensitive_replay.discovery.compute_clean_gradients",
+                side_effect=gradient_bundle,
+            ),
+            mock.patch(
+                "experiments.process_sensitive_replay.discovery._replay",
+                side_effect=replay,
+            ),
+            mock.patch(
+                "experiments.process_sensitive_replay.discovery._schedule",
+                return_value=SimpleNamespace(process_layer=0, positions={}),
+            ),
+            mock.patch(
+                "experiments.process_sensitive_replay.discovery.assert_hybrid_cache_integrity"
+            ),
+            mock.patch(
+                "experiments.process_sensitive_replay.discovery.assert_process_propagated"
+            ),
+        ):
+            record = measure_strength_grid_item(
+                adapter, answer, self.config, families=("beta",)
+            )
+
+        self.assertEqual(
+            called_layers,
+            [int(value) for value in self.config["layers"]["alternative_candidates"]],
+        )
+        self.assertIsNone(record["gradient_parity"])
+        self.assertEqual(
+            len(record["beta_grid"]),
+            len(self.config["layers"]["alternative_candidates"]),
+        )
 
 
 if __name__ == "__main__":

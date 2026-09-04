@@ -12,6 +12,7 @@ from .cache_state import (
     assert_cache_unchanged,
     audit_cache,
     clone_hybrid_cache,
+    release_cache_storage,
 )
 from .gradient_intervention import (
     InterventionSchedule,
@@ -212,6 +213,11 @@ class ReplayOutcome:
     teacher_forced: bool
     intervention_positions: tuple[int, ...]
     process_hook_positions: tuple[int, ...]
+
+    def release_cache(self) -> None:
+        """Release this outcome's cache after its immutable audit is consumed."""
+        release_cache_storage(self.cache)
+        self.cache = None
 
 
 def replay_teacher_forced(
@@ -470,7 +476,14 @@ def score_label_from_cache(
                 expected_position=adapter.cache_length(cache),
             )
     assert_cache_unchanged(source_before, boundary_cache, f"label scoring {label}")
-    return {"label": label, "token_ids": ids, "token_logprobs": values, "sequence_logprob": sum(values)}
+    result = {
+        "label": label,
+        "token_ids": ids,
+        "token_logprobs": values,
+        "sequence_logprob": sum(values),
+    }
+    release_cache_storage(cache)
+    return result
 
 
 def score_label_pair_from_cache(
@@ -519,9 +532,11 @@ def generate_from_cache(
             expected_position=adapter.cache_length(cache),
         )
     assert_cache_unchanged(source_before, boundary_cache, "meta generation")
-    return {
+    result = {
         "raw": tokenizer.decode(generated, skip_special_tokens=True),
         "token_ids": generated,
         "token_logprobs": values,
         "sequence_logprob": float(sum(values)),
     }
+    release_cache_storage(cache)
+    return result

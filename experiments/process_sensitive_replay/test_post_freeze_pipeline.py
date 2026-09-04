@@ -253,7 +253,7 @@ class PostFreezePipelineTests(unittest.TestCase):
             pre.mkdir()
             for filename in (
                 "trials.jsonl", "smoke_report.json", "trial_summary.csv",
-                "candidate_scores.csv",
+                "candidate_scores.csv", "cuda_memory.jsonl",
             ):
                 (pre / filename).write_text("{}\n", encoding="utf-8")
             discovery = run_dir / "discovery"
@@ -263,6 +263,7 @@ class PostFreezePipelineTests(unittest.TestCase):
                 "beta_grid_diagnostics.json", "strength_grid.jsonl",
                 "discovery_vocab_scores.pt", "candidate_metrics.pt", "trial_summary.csv",
                 "candidate_scores.csv", "candidate_discovery.json",
+                "cuda_memory.jsonl",
             ):
                 (discovery / filename).write_text(filename + "\n", encoding="utf-8")
             directions = discovery / "directions"
@@ -310,7 +311,7 @@ class PostFreezePipelineTests(unittest.TestCase):
             post.mkdir()
             for filename in (
                 "trials.jsonl", "smoke_report.json", "trial_summary.csv",
-                "candidate_scores.csv",
+                "candidate_scores.csv", "cuda_memory.jsonl",
             ):
                 (post / filename).write_text("{}\n", encoding="utf-8")
             _load_post_freeze_smoke_hash(run_dir, hashes)
@@ -324,6 +325,12 @@ class PostFreezePipelineTests(unittest.TestCase):
             (run_dir / "heldout").mkdir()
             args = argparse.Namespace(phase="heldout", hf_cache_dir=None)
             fake_records = [self._fake_record("16"), self._fake_record("17")]
+
+            def run_cuda_stub(_guard, memory_path, _hashes, **kwargs):
+                with memory_path.open("a", encoding="utf-8") as handle:
+                    handle.write("{}\n")
+                return kwargs["operation"]()
+
             with (
                 patch(
                     "experiments.process_sensitive_replay.runner.load_runtime",
@@ -332,6 +339,10 @@ class PostFreezePipelineTests(unittest.TestCase):
                 patch(
                     "experiments.process_sensitive_replay.runner.run_smoke_item",
                     side_effect=fake_records,
+                ),
+                patch(
+                    "experiments.process_sensitive_replay.runner.run_cuda_item",
+                    side_effect=run_cuda_stub,
                 ),
                 patch("experiments.process_sensitive_replay.runner._log_smoke_record"),
                 patch(

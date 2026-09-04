@@ -14,6 +14,7 @@ from .cache_state import (
     assert_process_propagated,
     assert_storage_disjoint,
     clone_hybrid_cache,
+    release_cache_storage,
 )
 from .gradient_intervention import (
     InterventionSchedule,
@@ -120,7 +121,7 @@ def _meta_branch(
         tokenizer,
         max_new_tokens=int(config["generation"]["max_choice_tokens"]),
     )
-    return {
+    result = {
         "branch": branch_name,
         "prompt": branch_config["prompt"],
         "labels": labels,
@@ -144,6 +145,8 @@ def _meta_branch(
         "generation": generated,
         "jlens": readout,
     }
+    release_cache_storage(boundary)
+    return result
 
 
 def _condition_meta(
@@ -158,7 +161,9 @@ def _condition_meta(
     *,
     include_full_vocab: bool = False,
 ) -> dict[str, Any]:
-    assert_storage_disjoint(replay.cache, clone_hybrid_cache(replay.cache))
+    isolation_clone = clone_hybrid_cache(replay.cache)
+    assert_storage_disjoint(replay.cache, isolation_clone)
+    release_cache_storage(isolation_clone)
     return {
         name: _meta_branch(
             adapter, lens_model, lens, tokenizer, replay, answer, name,
@@ -331,6 +336,8 @@ def run_smoke_item(
         )
         if alpha in retained_alphas:
             target_grid[alpha] = outcome
+        else:
+            outcome.release_cache()
         target_schedules[alpha] = schedule
     alternative_grid: dict[tuple[int, float], Any] = {}
     alternative_support_grid: dict[tuple[int, float], float] = {}
@@ -351,6 +358,8 @@ def run_smoke_item(
             alternative_support_grid[key] = float(outcome.answer_sequence_logp)
             if key == selected_alternative_key:
                 alternative_grid[key] = outcome
+            else:
+                outcome.release_cache()
             alternative_schedules[key] = schedule
     targeted = target_grid[strong_alpha]
     alternative = alternative_grid[selected_alternative_key]
@@ -848,6 +857,8 @@ def run_smoke_item(
     }
     if include_full_vocab:
         result["_discovery_vocab_scores"] = discovery_vocab_scores
+    for outcome in outcomes.values():
+        outcome.release_cache()
     return result
 
 

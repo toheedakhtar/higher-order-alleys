@@ -196,6 +196,12 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
         "require_exact_token_hash_parity": True,
     }:
         raise ValueError("frozen suffix-only Turn-3 replay contract changed")
+    if config.get("cuda_memory") != {
+        "max_post_cleanup_growth_mib": 1024,
+        "minimum_trend_step_mib": 128,
+        "consecutive_growth_items": 2,
+    }:
+        raise ValueError("fail-closed CUDA memory-lifetime contract changed")
     candidate_selection = config["candidate_selection"]
     if candidate_selection != {
         "primary_branch": "confidence",
