@@ -1,0 +1,27 @@
+{
+  "critical_checks": [
+    "alternative_norm_ceiling",
+    "branch_isolation",
+    "clean_gradient_cache_support_parity",
+    "downstream_state_changed",
+    "gradient_finite_nonzero",
+    "gradient_hook_scope",
+    "gradient_residual_parity",
+    "gradient_token_logit_parity",
+    "gradient_total_support_parity",
+    "hybrid_cache_integrity",
+    "intervention_hook_scope",
+    "random_norm_match",
+    "reset_parity",
+    "teacher_forcing_all_conditions",
+    "turn3_suffix_integrity",
+    "visible_hash_parity"
+  ],
+  "items": 4,
+  "passed": true,
+  "phase": "pre_discovery_smoke",
+  "support_matching": {
+    "reason": "pre-discovery engineering smoke does not select or require frozen beta",
+    "required": false
+  }
+}

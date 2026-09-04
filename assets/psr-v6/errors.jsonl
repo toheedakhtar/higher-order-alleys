@@ -1,0 +1,3 @@
+{"timestamp": "2026-09-03T23:31:41.171203+00:00", "phase": "answer_bank", "status": "failed", "error_type": "ModuleNotFoundError", "message": "No module named 'jlens'"}
+{"timestamp": "2026-09-03T23:58:48.152755+00:00", "phase": "discovery", "status": "failed", "error_type": "RuntimeError", "message": "alpha_strength_gate_failed: WEAK must be strictly smaller than STRONG; selected weak=0.1 strong=0.1"}
+{"timestamp": "2026-09-03T23:59:03.376906+00:00", "phase": "freeze", "status": "failed", "error_type": "FileNotFoundError", "message": "[Errno 2] No such file or directory: '/home/higher-order-alleys/assets/psr-v6/discovery/beta_grid.jsonl'"}

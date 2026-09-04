@@ -1,0 +1,22 @@
+{
+  "input_hashes": {
+    "code": "b506c983c05af99813ccfa97b304f1f783fc57340c154eb74764f74d15d0f590",
+    "config": "84bea77bd18fa97e2801b90126e9964dfbbc875480cb6184964961e2aed5b11f",
+    "dataset": "4e98c0c7f8b7a25833fa8c2e2f55356f0995c5a8ace8e003c4d4c8bd0d0f83c6",
+    "lens_spec": "56542cc6dc4eb6736c4cb884960356596d4f3dfbdfd4bff39b49a40ab178f735",
+    "model_spec": "6a71bfe796f5dfed83addf1d3a4aae2f57dc0071f67c3912324f6f9dc11bebc3",
+    "scientific_protocol": "2620d6b964980d0aa55f6e244acc11b72705a20c2df977922e49f2a97842e413"
+  },
+  "measurements": {
+    "item_count": 82,
+    "item_type_counts": {
+      "calibration": 66,
+      "knowledge_boundary": 8,
+      "prospective": 8
+    }
+  },
+  "phase": "validate",
+  "protocol_hash": "1f862614f89beb78b874e47493a4a14feccd85a1faad73d44abd93daebeb8b5c",
+  "reason": null,
+  "status": "passed"
+}

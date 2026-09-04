@@ -1,0 +1,123 @@
+{"timestamp": "2026-09-03T23:33:54.989747+00:00", "event_type": "thinking_mode_verified", "item_ids": ["0", "66", "82"], "artifact_sha256": "45b73542600f0132dfaf5019331b201b3b0b9049d8245c81675d88cf039acab5"}
+{"timestamp": "2026-09-03T23:33:59.470371+00:00", "event_type": "answer_discovered", "item_id": "0", "invalid": false}
+{"timestamp": "2026-09-03T23:34:02.522053+00:00", "event_type": "answer_discovered", "item_id": "1", "invalid": false}
+{"timestamp": "2026-09-03T23:34:05.613724+00:00", "event_type": "answer_discovered", "item_id": "2", "invalid": false}
+{"timestamp": "2026-09-03T23:34:08.567189+00:00", "event_type": "answer_discovered", "item_id": "3", "invalid": false}
+{"timestamp": "2026-09-03T23:34:11.658040+00:00", "event_type": "answer_discovered", "item_id": "4", "invalid": false}
+{"timestamp": "2026-09-03T23:34:15.065176+00:00", "event_type": "answer_discovered", "item_id": "5", "invalid": false}
+{"timestamp": "2026-09-03T23:34:18.288151+00:00", "event_type": "answer_discovered", "item_id": "6", "invalid": false}
+{"timestamp": "2026-09-03T23:34:21.280666+00:00", "event_type": "answer_discovered", "item_id": "7", "invalid": false}
+{"timestamp": "2026-09-03T23:34:24.317607+00:00", "event_type": "answer_discovered", "item_id": "8", "invalid": false}
+{"timestamp": "2026-09-03T23:34:27.537114+00:00", "event_type": "answer_discovered", "item_id": "9", "invalid": false}
+{"timestamp": "2026-09-03T23:34:30.804950+00:00", "event_type": "answer_discovered", "item_id": "10", "invalid": false}
+{"timestamp": "2026-09-03T23:34:33.917804+00:00", "event_type": "answer_discovered", "item_id": "11", "invalid": false}
+{"timestamp": "2026-09-03T23:34:37.137111+00:00", "event_type": "answer_discovered", "item_id": "12", "invalid": false}
+{"timestamp": "2026-09-03T23:34:40.659998+00:00", "event_type": "answer_discovered", "item_id": "13", "invalid": false}
+{"timestamp": "2026-09-03T23:34:43.727120+00:00", "event_type": "answer_discovered", "item_id": "14", "invalid": false}
+{"timestamp": "2026-09-03T23:34:46.749681+00:00", "event_type": "answer_discovered", "item_id": "15", "invalid": false}
+{"timestamp": "2026-09-03T23:34:49.955598+00:00", "event_type": "answer_discovered", "item_id": "16", "invalid": false}
+{"timestamp": "2026-09-03T23:34:53.207242+00:00", "event_type": "answer_discovered", "item_id": "17", "invalid": false}
+{"timestamp": "2026-09-03T23:34:56.366476+00:00", "event_type": "answer_discovered", "item_id": "18", "invalid": false}
+{"timestamp": "2026-09-03T23:34:59.479753+00:00", "event_type": "answer_discovered", "item_id": "19", "invalid": false}
+{"timestamp": "2026-09-03T23:35:02.730548+00:00", "event_type": "answer_discovered", "item_id": "20", "invalid": false}
+{"timestamp": "2026-09-03T23:35:06.026475+00:00", "event_type": "answer_discovered", "item_id": "21", "invalid": false}
+{"timestamp": "2026-09-03T23:35:09.414427+00:00", "event_type": "answer_discovered", "item_id": "22", "invalid": false}
+{"timestamp": "2026-09-03T23:35:12.527704+00:00", "event_type": "answer_discovered", "item_id": "23", "invalid": false}
+{"timestamp": "2026-09-03T23:35:15.778599+00:00", "event_type": "answer_discovered", "item_id": "24", "invalid": false}
+{"timestamp": "2026-09-03T23:35:18.983403+00:00", "event_type": "answer_discovered", "item_id": "25", "invalid": false}
+{"timestamp": "2026-09-03T23:35:22.279163+00:00", "event_type": "answer_discovered", "item_id": "26", "invalid": false}
+{"timestamp": "2026-09-03T23:35:25.802423+00:00", "event_type": "answer_discovered", "item_id": "27", "invalid": false}
+{"timestamp": "2026-09-03T23:35:29.235127+00:00", "event_type": "answer_discovered", "item_id": "28", "invalid": false}
+{"timestamp": "2026-09-03T23:35:32.803778+00:00", "event_type": "answer_discovered", "item_id": "29", "invalid": false}
+{"timestamp": "2026-09-03T23:35:36.372427+00:00", "event_type": "answer_discovered", "item_id": "30", "invalid": false}
+{"timestamp": "2026-09-03T23:35:39.667630+00:00", "event_type": "answer_discovered", "item_id": "31", "invalid": false}
+{"timestamp": "2026-09-03T23:35:43.191589+00:00", "event_type": "answer_discovered", "item_id": "32", "invalid": false}
+{"timestamp": "2026-09-03T23:35:46.441141+00:00", "event_type": "answer_discovered", "item_id": "33", "invalid": false}
+{"timestamp": "2026-09-03T23:35:49.873734+00:00", "event_type": "answer_discovered", "item_id": "34", "invalid": false}
+{"timestamp": "2026-09-03T23:35:53.078427+00:00", "event_type": "answer_discovered", "item_id": "35", "invalid": false}
+{"timestamp": "2026-09-03T23:35:56.419619+00:00", "event_type": "answer_discovered", "item_id": "36", "invalid": false}
+{"timestamp": "2026-09-03T23:35:59.988936+00:00", "event_type": "answer_discovered", "item_id": "37", "invalid": false}
+{"timestamp": "2026-09-03T23:36:03.192433+00:00", "event_type": "answer_discovered", "item_id": "38", "invalid": false}
+{"timestamp": "2026-09-03T23:36:06.578465+00:00", "event_type": "answer_discovered", "item_id": "39", "invalid": false}
+{"timestamp": "2026-09-03T23:36:10.284281+00:00", "event_type": "answer_discovered", "item_id": "40", "invalid": false}
+{"timestamp": "2026-09-03T23:36:13.943579+00:00", "event_type": "answer_discovered", "item_id": "41", "invalid": false}
+{"timestamp": "2026-09-03T23:36:17.557918+00:00", "event_type": "answer_discovered", "item_id": "42", "invalid": false}
+{"timestamp": "2026-09-03T23:36:20.852364+00:00", "event_type": "answer_discovered", "item_id": "43", "invalid": false}
+{"timestamp": "2026-09-03T23:36:24.240868+00:00", "event_type": "answer_discovered", "item_id": "44", "invalid": false}
+{"timestamp": "2026-09-03T23:36:27.764735+00:00", "event_type": "answer_discovered", "item_id": "45", "invalid": false}
+{"timestamp": "2026-09-03T23:36:31.060612+00:00", "event_type": "answer_discovered", "item_id": "46", "invalid": false}
+{"timestamp": "2026-09-03T23:36:34.310217+00:00", "event_type": "answer_discovered", "item_id": "47", "invalid": false}
+{"timestamp": "2026-09-03T23:36:38.381042+00:00", "event_type": "answer_discovered", "item_id": "48", "invalid": false}
+{"timestamp": "2026-09-03T23:36:41.721202+00:00", "event_type": "answer_discovered", "item_id": "49", "invalid": false}
+{"timestamp": "2026-09-03T23:36:45.335833+00:00", "event_type": "answer_discovered", "item_id": "50", "invalid": false}
+{"timestamp": "2026-09-03T23:36:48.630861+00:00", "event_type": "answer_discovered", "item_id": "51", "invalid": false}
+{"timestamp": "2026-09-03T23:36:51.972405+00:00", "event_type": "answer_discovered", "item_id": "52", "invalid": false}
+{"timestamp": "2026-09-03T23:36:55.222508+00:00", "event_type": "answer_discovered", "item_id": "53", "invalid": false}
+{"timestamp": "2026-09-03T23:36:58.655387+00:00", "event_type": "answer_discovered", "item_id": "54", "invalid": false}
+{"timestamp": "2026-09-03T23:37:02.093165+00:00", "event_type": "answer_discovered", "item_id": "55", "invalid": false}
+{"timestamp": "2026-09-03T23:37:05.981756+00:00", "event_type": "answer_discovered", "item_id": "56", "invalid": false}
+{"timestamp": "2026-09-03T23:37:10.008158+00:00", "event_type": "answer_discovered", "item_id": "57", "invalid": false}
+{"timestamp": "2026-09-03T23:37:13.213096+00:00", "event_type": "answer_discovered", "item_id": "58", "invalid": false}
+{"timestamp": "2026-09-03T23:37:16.918518+00:00", "event_type": "answer_discovered", "item_id": "59", "invalid": false}
+{"timestamp": "2026-09-03T23:37:20.670622+00:00", "event_type": "answer_discovered", "item_id": "60", "invalid": false}
+{"timestamp": "2026-09-03T23:37:24.284754+00:00", "event_type": "answer_discovered", "item_id": "61", "invalid": false}
+{"timestamp": "2026-09-03T23:37:27.990742+00:00", "event_type": "answer_discovered", "item_id": "62", "invalid": false}
+{"timestamp": "2026-09-03T23:37:31.927309+00:00", "event_type": "answer_discovered", "item_id": "63", "invalid": false}
+{"timestamp": "2026-09-03T23:37:35.405534+00:00", "event_type": "answer_discovered", "item_id": "64", "invalid": false}
+{"timestamp": "2026-09-03T23:37:38.973985+00:00", "event_type": "answer_discovered", "item_id": "65", "invalid": false}
+{"timestamp": "2026-09-03T23:37:41.360058+00:00", "event_type": "answer_discovered", "item_id": "66", "invalid": false}
+{"timestamp": "2026-09-03T23:37:46.167465+00:00", "event_type": "answer_discovered", "item_id": "67", "invalid": false}
+{"timestamp": "2026-09-03T23:37:52.116427+00:00", "event_type": "answer_discovered", "item_id": "68", "invalid": false}
+{"timestamp": "2026-09-03T23:38:01.771712+00:00", "event_type": "answer_discovered", "item_id": "69", "invalid": false}
+{"timestamp": "2026-09-03T23:38:15.633466+00:00", "event_type": "answer_discovered", "item_id": "70", "invalid": true}
+{"timestamp": "2026-09-03T23:38:29.540003+00:00", "event_type": "answer_discovered", "item_id": "71", "invalid": true}
+{"timestamp": "2026-09-03T23:38:40.293319+00:00", "event_type": "answer_discovered", "item_id": "72", "invalid": false}
+{"timestamp": "2026-09-03T23:38:53.880745+00:00", "event_type": "answer_discovered", "item_id": "73", "invalid": true}
+{"timestamp": "2026-09-03T23:39:03.216935+00:00", "event_type": "answer_discovered", "item_id": "82", "invalid": false}
+{"timestamp": "2026-09-03T23:39:11.502065+00:00", "event_type": "answer_discovered", "item_id": "83", "invalid": false}
+{"timestamp": "2026-09-03T23:39:25.181909+00:00", "event_type": "answer_discovered", "item_id": "84", "invalid": true}
+{"timestamp": "2026-09-03T23:39:38.633660+00:00", "event_type": "answer_discovered", "item_id": "85", "invalid": true}
+{"timestamp": "2026-09-03T23:39:51.903170+00:00", "event_type": "answer_discovered", "item_id": "86", "invalid": true}
+{"timestamp": "2026-09-03T23:40:05.536549+00:00", "event_type": "answer_discovered", "item_id": "87", "invalid": true}
+{"timestamp": "2026-09-03T23:40:19.034217+00:00", "event_type": "answer_discovered", "item_id": "88", "invalid": true}
+{"timestamp": "2026-09-03T23:40:32.530337+00:00", "event_type": "answer_discovered", "item_id": "89", "invalid": true}
+{"timestamp": "2026-09-03T23:40:57.099411+00:00", "event_type": "smoke_trial_started", "phase": "pre_discovery_smoke", "item_id": "1"}
+{"timestamp": "2026-09-03T23:42:35.511887+00:00", "event_type": "smoke_trial_completed", "phase": "pre_discovery_smoke", "item_id": "1"}
+{"timestamp": "2026-09-03T23:42:35.534727+00:00", "event_type": "smoke_trial_started", "phase": "pre_discovery_smoke", "item_id": "14"}
+{"timestamp": "2026-09-03T23:44:13.929807+00:00", "event_type": "smoke_trial_completed", "phase": "pre_discovery_smoke", "item_id": "14"}
+{"timestamp": "2026-09-03T23:44:13.953328+00:00", "event_type": "smoke_trial_started", "phase": "pre_discovery_smoke", "item_id": "15"}
+{"timestamp": "2026-09-03T23:45:51.357260+00:00", "event_type": "smoke_trial_completed", "phase": "pre_discovery_smoke", "item_id": "15"}
+{"timestamp": "2026-09-03T23:45:51.381646+00:00", "event_type": "smoke_trial_started", "phase": "pre_discovery_smoke", "item_id": "17"}
+{"timestamp": "2026-09-03T23:47:32.495397+00:00", "event_type": "smoke_trial_completed", "phase": "pre_discovery_smoke", "item_id": "17"}
+{"timestamp": "2026-09-03T23:47:55.404104+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "1"}
+{"timestamp": "2026-09-03T23:48:23.001149+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "1"}
+{"timestamp": "2026-09-03T23:48:23.001203+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "14"}
+{"timestamp": "2026-09-03T23:48:50.214499+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "14"}
+{"timestamp": "2026-09-03T23:48:50.214565+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "15"}
+{"timestamp": "2026-09-03T23:49:17.027845+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "15"}
+{"timestamp": "2026-09-03T23:49:17.027900+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "17"}
+{"timestamp": "2026-09-03T23:49:45.625331+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "17"}
+{"timestamp": "2026-09-03T23:49:45.625385+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "43"}
+{"timestamp": "2026-09-03T23:50:14.592575+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "43"}
+{"timestamp": "2026-09-03T23:50:14.592631+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "44"}
+{"timestamp": "2026-09-03T23:50:44.296720+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "44"}
+{"timestamp": "2026-09-03T23:50:44.296772+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "48"}
+{"timestamp": "2026-09-03T23:51:19.493966+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "48"}
+{"timestamp": "2026-09-03T23:51:19.494019+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "57"}
+{"timestamp": "2026-09-03T23:51:54.315341+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "57"}
+{"timestamp": "2026-09-03T23:51:54.315397+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "6"}
+{"timestamp": "2026-09-03T23:52:22.769624+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "6"}
+{"timestamp": "2026-09-03T23:52:22.769672+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "63"}
+{"timestamp": "2026-09-03T23:52:56.811367+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "63"}
+{"timestamp": "2026-09-03T23:52:56.811420+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "65"}
+{"timestamp": "2026-09-03T23:53:27.920860+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "65"}
+{"timestamp": "2026-09-03T23:53:27.920911+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "66"}
+{"timestamp": "2026-09-03T23:53:51.841622+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "66"}
+{"timestamp": "2026-09-03T23:53:51.841668+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "69"}
+{"timestamp": "2026-09-03T23:55:26.522015+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "69"}
+{"timestamp": "2026-09-03T23:55:26.522064+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "8"}
+{"timestamp": "2026-09-03T23:55:53.442821+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "8"}
+{"timestamp": "2026-09-03T23:55:53.442876+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "82"}
+{"timestamp": "2026-09-03T23:57:26.088744+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "82"}
+{"timestamp": "2026-09-03T23:57:26.088793+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "83"}
+{"timestamp": "2026-09-03T23:58:48.151825+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "83"}
