@@ -22,11 +22,14 @@
   },
   "layers": {
     "process": 31,
+    "alternative_candidates": [15, 19, 23],
+    "minimum_alternative_separation": 8,
     "meta_readout": 40,
     "readout": [36, 37, 38, 39, 40, 41, 42, 43, 44],
     "expected_model_layers": 64,
     "expected_hidden_size": 5120,
-    "expected_process_layer_type": "full_attention"
+    "expected_process_layer_type": "full_attention",
+    "expected_alternative_layer_type": "full_attention"
   },
   "conditions": [
     "clean_preserved",
@@ -34,6 +37,7 @@
     "targeted_strong_preserved",
     "random_strong_preserved",
     "support_matched_alternative_preserved",
+    "alternative_random_preserved",
     "targeted_strong_reset"
   ],
   "split": {
@@ -47,16 +51,18 @@
   },
   "strengths": {
     "alpha_grid": [0.01, 0.02, 0.05, 0.1, 0.11, 0.125, 0.15, 0.2],
-    "beta_grid": [0.05, 0.1, 0.2, 0.4, 0.8],
+    "beta_grid": [0.05, 0.08, 0.1, 0.11, 0.125, 0.15, 0.2, 0.3, 0.4],
     "weak_min_median_drop_nat": 0.75,
     "weak_min_positive_items": 12,
     "strong_median_drop_range_nat": [2.0, 4.0]
   },
   "alternative": {
-    "objective": "predictive_distribution_entropy",
-    "max_abs_cosine_with_answer_gradient": 0.1,
+    "objective": "full_answer_sequence_log_probability",
+    "mechanism": "different_layer_same_objective_answer_support_reduction",
+    "selection_inputs": ["support_match_quality", "finite_state_integrity", "perturbation_size"],
+    "prohibited_selection_inputs": ["candidate_j_space", "confidence", "correctness", "heldout"],
     "max_median_norm_ratio_to_targeted": 4.0,
-    "fallback": "seeded_gaussian_projected_orthogonal"
+    "random_max_abs_cosine_with_answer_gradient": 0.1
   },
   "support_matching": {
     "absolute_tolerance_nat": 0.5,
@@ -113,6 +119,7 @@
       "targeted_strong_effect",
       "support_matched_alternative_effect",
       "targeted_minus_random",
+      "alternative_minus_random",
       "targeted_preserved_minus_reset",
       "support_adjusted_agreement",
       "item_sign_consistency"

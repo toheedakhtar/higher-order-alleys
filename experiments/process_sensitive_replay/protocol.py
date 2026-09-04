@@ -37,6 +37,7 @@ EXPECTED_CONDITIONS = (
     "targeted_strong_preserved",
     "random_strong_preserved",
     "support_matched_alternative_preserved",
+    "alternative_random_preserved",
     "targeted_strong_reset",
 )
 
@@ -117,21 +118,53 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
     layers = config["layers"]
     if int(layers["process"]) != 31 or int(layers["meta_readout"]) != 40:
         raise ValueError("frozen process/meta layer changed")
+    alternative_layers = [int(value) for value in layers["alternative_candidates"]]
+    if alternative_layers != [15, 19, 23]:
+        raise ValueError("declared psr-v8 alternative-layer set changed")
+    if int(layers["minimum_alternative_separation"]) != 8:
+        raise ValueError("frozen alternative-layer separation changed")
+    if any(
+        layer >= int(layers["process"])
+        or int(layers["process"]) - layer < int(layers["minimum_alternative_separation"])
+        or layer >= int(layers["meta_readout"])
+        for layer in alternative_layers
+    ):
+        raise ValueError("alternative layers violate ordering/separation constraints")
+    if (
+        layers.get("expected_process_layer_type") != "full_attention"
+        or layers.get("expected_alternative_layer_type") != "full_attention"
+    ):
+        raise ValueError("frozen intervention-layer architecture contract changed")
     if list(layers["readout"]) != list(range(36, 45)):
         raise ValueError("frozen J-Lens readout layers changed")
     strengths = config["strengths"]
     if [float(value) for value in strengths["alpha_grid"]] != [
         0.01, 0.02, 0.05, 0.1, 0.11, 0.125, 0.15, 0.2
     ]:
-        raise ValueError("declared psr-v7 alpha grid changed")
+        raise ValueError("declared psr-v8 alpha grid changed")
     if [float(value) for value in strengths["beta_grid"]] != [
-        0.05, 0.1, 0.2, 0.4, 0.8
+        0.05, 0.08, 0.1, 0.11, 0.125, 0.15, 0.2, 0.3, 0.4
     ]:
-        raise ValueError("frozen beta grid changed")
+        raise ValueError("declared psr-v8 beta grid changed")
+    alternative = config["alternative"]
+    if alternative != {
+        "objective": "full_answer_sequence_log_probability",
+        "mechanism": "different_layer_same_objective_answer_support_reduction",
+        "selection_inputs": [
+            "support_match_quality", "finite_state_integrity", "perturbation_size",
+        ],
+        "prohibited_selection_inputs": [
+            "candidate_j_space", "confidence", "correctness", "heldout",
+        ],
+        "max_median_norm_ratio_to_targeted": 4.0,
+        "random_max_abs_cosine_with_answer_gradient": 0.1,
+    }:
+        raise ValueError("frozen psr-v8 alternative-mechanism contract changed")
     support = config["support_matching"]
     if (
         float(support["absolute_tolerance_nat"]) != 0.5
         or float(support["relative_tolerance"]) != 0.25
+        or float(support["discovery_median_drop_relative_tolerance"]) != 0.25
         or float(support["heldout_min_item_match_fraction"]) != 0.65
         or support.get("item_match_requires_positive_targeted_drop") is not True
     ):
@@ -175,6 +208,7 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
             "targeted_strong_effect",
             "support_matched_alternative_effect",
             "targeted_minus_random",
+            "alternative_minus_random",
             "targeted_preserved_minus_reset",
             "support_adjusted_agreement",
             "item_sign_consistency",
@@ -350,12 +384,17 @@ def validate_frozen_protocol(
     weak = float(frozen["weak_alpha"])
     strong = float(frozen["strong_alpha"])
     beta = float(frozen["beta"])
+    alternative_layer = int(frozen["alternative_layer"])
     alpha_grid = [float(value) for value in config["strengths"]["alpha_grid"]]
     beta_grid = [float(value) for value in config["strengths"]["beta_grid"]]
     if weak not in alpha_grid or strong not in alpha_grid or weak >= strong:
         raise ValueError("frozen alpha strengths violate the discovery grid")
     if beta not in beta_grid:
         raise ValueError("frozen beta violates the discovery grid")
+    if alternative_layer not in [
+        int(value) for value in config["layers"]["alternative_candidates"]
+    ]:
+        raise ValueError("frozen alternative layer violates the discovery set")
     if frozen.get("candidate_selection") != config["candidate_selection"]:
         raise ValueError("frozen candidate-selection rule changed")
     if frozen.get("support_matching") != config["support_matching"]:
@@ -390,6 +429,7 @@ def validate_frozen_protocol(
         "weak_alpha": weak,
         "strong_alpha": strong,
         "beta": beta,
+        "alternative_layer": alternative_layer,
     }
 
 

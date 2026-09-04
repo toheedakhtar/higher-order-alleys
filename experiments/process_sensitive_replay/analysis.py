@@ -21,6 +21,7 @@ CONDITION_LABELS = {
     "targeted_strong_preserved": "TARGETED_STRONG",
     "support_matched_alternative_preserved": "SUPPORT_MATCHED_ALTERNATIVE",
     "random_strong_preserved": "RANDOM_NORM_MATCHED",
+    "alternative_random_preserved": "ALTERNATIVE_RANDOM_NORM_MATCHED",
     "targeted_strong_reset": "RESET",
 }
 
@@ -241,7 +242,7 @@ def analyze_candidate_effects(
             )
             alternative_random.append(
                 score["support_matched_alternative_preserved"]
-                - score["random_strong_preserved"]
+                - score["alternative_random_preserved"]
             )
             targeted_reset.append(
                 score["targeted_strong_preserved"] - score["targeted_strong_reset"]
@@ -369,14 +370,24 @@ def generate_required_plots(
         by_condition[str(row["condition"])].append(row)
 
     manipulation_conditions = [
-        "clean_preserved", "targeted_weak_preserved", "targeted_strong_preserved",
-        "support_matched_alternative_preserved", "random_strong_preserved",
+        "clean_preserved", "targeted_strong_preserved",
+        "random_strong_preserved", "support_matched_alternative_preserved",
+        "alternative_random_preserved",
     ]
+    def mechanism_label(condition: str, rows: Sequence[Mapping[str, Any]]) -> str:
+        layer = rows[0].get("intervention_layer") if rows else None
+        return (
+            CONDITION_LABELS[condition]
+            if layer in {None, "", "None"}
+            else f"{CONDITION_LABELS[condition]} (L{int(layer)})"
+        )
     plt.figure(figsize=(10, 5))
     plt.boxplot([
         [float(row["support_drop"]) for row in by_condition[name]]
         for name in manipulation_conditions
-    ], tick_labels=[CONDITION_LABELS[name] for name in manipulation_conditions])
+    ], tick_labels=[
+        mechanism_label(name, by_condition[name]) for name in manipulation_conditions
+    ])
     plt.ylabel("Answer-sequence support drop (nat)")
     plt.xticks(rotation=20, ha="right")
     save("01_manipulation_check.png")
@@ -389,7 +400,7 @@ def generate_required_plots(
             [float(row["choice_margin"]) for row in rows],
             s=16,
             alpha=0.65,
-            label=CONDITION_LABELS[condition],
+            label=mechanism_label(condition, rows),
         )
     plt.xlabel("Support drop (nat)")
     plt.ylabel("HIGH_CONFIDENCE - LOW_CONFIDENCE log-probability margin")
@@ -414,7 +425,7 @@ def generate_required_plots(
             plt.scatter(
                 [float(row["support_drop"]) for row in rows],
                 [float(row["oriented_candidate_score"]) for row in rows],
-                s=16, alpha=0.65, label=CONDITION_LABELS[condition],
+                s=16, alpha=0.65, label=mechanism_label(condition, rows),
             )
         plt.xlabel("Support drop (nat)")
         plt.ylabel("Oriented candidate score")
@@ -439,6 +450,18 @@ def generate_required_plots(
             save(f"{number}_{suffix}.png")
 
         paired_plot("targeted_strong_preserved", "random_strong_preserved", "04_targeted_vs_random", "Targeted versus random")
+        paired_plot(
+            "targeted_strong_preserved",
+            "support_matched_alternative_preserved",
+            "04a_primary_vs_alternative",
+            "Primary targeted versus alternative targeted",
+        )
+        paired_plot(
+            "support_matched_alternative_preserved",
+            "alternative_random_preserved",
+            "04b_alternative_vs_random",
+            "Alternative targeted versus same-layer random",
+        )
         paired_plot("targeted_strong_preserved", "targeted_strong_reset", "05_preserved_vs_reset", "Preserved versus reset")
         paired_plot("clean_preserved", "targeted_strong_preserved", "06_clean_vs_targeted", "Identical text: clean versus targeted")
 
@@ -450,7 +473,8 @@ def generate_required_plots(
         ]
         for condition in (
             "clean_preserved", "targeted_strong_preserved",
-            "support_matched_alternative_preserved", "random_strong_preserved",
+            "random_strong_preserved", "support_matched_alternative_preserved",
+            "alternative_random_preserved",
             "targeted_strong_reset",
         ):
             layer_values: dict[int, list[float]] = defaultdict(list)
@@ -469,7 +493,7 @@ def generate_required_plots(
             ("targeted-clean", "targeted_strong_preserved", "clean_preserved"),
             ("alternative-clean", "support_matched_alternative_preserved", "clean_preserved"),
             ("targeted-random", "targeted_strong_preserved", "random_strong_preserved"),
-            ("alternative-random", "support_matched_alternative_preserved", "random_strong_preserved"),
+            ("alternative-random", "support_matched_alternative_preserved", "alternative_random_preserved"),
             ("targeted-reset", "targeted_strong_preserved", "targeted_strong_reset"),
             ("targeted-alternative", "targeted_strong_preserved", "support_matched_alternative_preserved"),
         ]
@@ -496,34 +520,40 @@ def generate_required_plots(
         plt.ylabel("Mean oriented effect with item-bootstrap 95% CI")
         save(f"09_effect_summary_{suffix}.png")
 
-        five = [
+        comparison_conditions = [
             "clean_preserved", "targeted_strong_preserved",
-            "support_matched_alternative_preserved", "random_strong_preserved",
+            "random_strong_preserved", "support_matched_alternative_preserved",
+            "alternative_random_preserved",
             "targeted_strong_reset",
         ]
         plt.figure(figsize=(10, 5))
-        five_maps = {
+        comparison_maps = {
             condition: {
                 str(row["item_id"]): float(row["oriented_candidate_score"])
                 for row in condition_rows[condition]
             }
-            for condition in five
+            for condition in comparison_conditions
         }
-        for item_id in sorted(five_maps[five[0]]):
+        for item_id in sorted(comparison_maps[comparison_conditions[0]]):
             plt.plot(
-                range(len(five)),
-                [five_maps[condition][item_id] for condition in five],
+                range(len(comparison_conditions)),
+                [comparison_maps[condition][item_id] for condition in comparison_conditions],
                 color="0.82",
                 linewidth=0.5,
                 zorder=0,
             )
-        for index, condition in enumerate(five):
+        for index, condition in enumerate(comparison_conditions):
             values = [float(row["oriented_candidate_score"]) for row in condition_rows[condition]]
             plt.scatter([index] * len(values), values, s=12, alpha=0.4)
             plt.scatter(index, mean(values), marker="D", s=55, color="black")
-        plt.xticks(range(len(five)), [CONDITION_LABELS[name] for name in five], rotation=20, ha="right")
+        plt.xticks(
+            range(len(comparison_conditions)),
+            [CONDITION_LABELS[name] for name in comparison_conditions],
+            rotation=20,
+            ha="right",
+        )
         plt.ylabel("Oriented candidate score")
-        save(f"10_five_condition_comparison_{suffix}.png")
+        save(f"10_mechanism_control_comparison_{suffix}.png")
 
         target = maps["targeted_strong_preserved"]
         alternative = maps["support_matched_alternative_preserved"]
@@ -551,6 +581,40 @@ def generate_required_plots(
         plt.xlabel("Targeted response / targeted support drop")
         plt.ylabel("Alternative response / alternative support drop")
         save(f"11_support_normalized_convergence_{suffix}.png")
+
+        fixed = _fixed_effect_mechanism(
+            [
+                float(target[item]["oriented_candidate_score"])
+                - float(clean[item]["oriented_candidate_score"])
+                for item in target
+            ],
+            [
+                float(alternative[item]["oriented_candidate_score"])
+                - float(clean[item]["oriented_candidate_score"])
+                for item in target
+            ],
+            [float(target[item]["support_drop"]) for item in target],
+            [float(alternative[item]["support_drop"]) for item in target],
+        )
+        mean_shared_drop = mean([
+            0.5 * (
+                float(target[item]["support_drop"])
+                + float(alternative[item]["support_drop"])
+            )
+            for item in target
+        ])
+        support_component = float(fixed["beta_support"]) * mean_shared_drop
+        mechanism_component = float(fixed["beta_mechanism"])
+        plt.figure(figsize=(6, 5))
+        plt.bar(
+            ["Shared support component", "Alternative-layer residual"],
+            [support_component, mechanism_component],
+            color=["tab:blue", "tab:orange"],
+        )
+        plt.axhline(0, color="black", linewidth=0.8)
+        plt.ylabel("Oriented candidate-score component")
+        plt.xticks(rotation=15, ha="right")
+        save(f"13_support_vs_mechanism_residual_{suffix}.png")
 
     generic = [
         row for row in candidate_score_rows

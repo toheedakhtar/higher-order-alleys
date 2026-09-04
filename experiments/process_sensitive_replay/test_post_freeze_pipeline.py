@@ -77,6 +77,7 @@ class PostFreezePipelineTests(unittest.TestCase):
                     "target_grid": {"0.1": -1.5, "0.11": -3.0},
                     "random_drop": 0.2,
                     "alternative_drop": 2.1,
+                    "alternative_random_drop": 0.3,
                 }
             },
             weak_alpha=0.1,
@@ -84,11 +85,12 @@ class PostFreezePipelineTests(unittest.TestCase):
         )
         self.assertEqual(row[0], 0.0)
         self.assertEqual(row[2], 2.0)
-        self.assertEqual(row[5], 2.0)
+        self.assertEqual(row[6], 2.0)
 
     def test_effect_extraction_and_model_free_analysis_cover_h1_to_h7_and_plots(self) -> None:
         frozen = {
             "weak_alpha": 0.1,
+            "alternative_layer": 19,
             "candidates": [{
                 "label": " reliability",
                 "layer": 40,
@@ -105,6 +107,7 @@ class PostFreezePipelineTests(unittest.TestCase):
                 "targeted_strong_preserved": 2.0,
                 "random_strong_preserved": 0.25,
                 "support_matched_alternative_preserved": 1.9,
+                "alternative_random_preserved": 0.3,
                 "targeted_strong_reset": 0.0,
             }
             for condition, candidate_score in condition_scores.items():
@@ -129,6 +132,7 @@ class PostFreezePipelineTests(unittest.TestCase):
                     "targeted_drop": 2.0,
                     "alternative_drop": 2.1,
                     "random_drop": 0.25,
+                    "alternative_random_drop": 0.3,
                 },
                 "meta": meta,
             })
@@ -173,7 +177,7 @@ class PostFreezePipelineTests(unittest.TestCase):
                 primary_branch="confidence",
                 generic_token_ids=self.config["readout"]["generic_evaluator_token_ids"],
             )
-            self.assertEqual(len(paths), 12)
+            self.assertEqual(len(paths), 15)
             self.assertTrue(all(path.is_file() and path.stat().st_size for path in paths))
 
     def _fake_record(self, item_id: str) -> dict:
@@ -184,6 +188,7 @@ class PostFreezePipelineTests(unittest.TestCase):
             "targeted_strong_preserved": 2.0,
             "random_strong_preserved": 0.2,
             "support_matched_alternative_preserved": 1.9,
+            "alternative_random_preserved": 0.3,
             "targeted_strong_reset": 0.0,
             "clean_reset": 0.0,
         }
@@ -215,6 +220,7 @@ class PostFreezePipelineTests(unittest.TestCase):
                 "targeted_drop": 2.0,
                 "alternative_drop": 2.1,
                 "random_drop": 0.2,
+                "alternative_random_drop": 0.3,
             },
             "checks": {"reset_parity": True, "hybrid_cache_integrity": True},
             "meta": meta,
@@ -287,6 +293,7 @@ class PostFreezePipelineTests(unittest.TestCase):
                 "weak_alpha": 0.1,
                 "strong_alpha": 0.11,
                 "beta": 0.2,
+                "alternative_layer": 19,
                 "candidate_selection": self.config["candidate_selection"],
                 "support_matching": self.config["support_matching"],
                 "conditions": self.config["conditions"],
@@ -343,7 +350,7 @@ class PostFreezePipelineTests(unittest.TestCase):
             analyzed = run_analyze_phase(
                 run_dir, self.config, campaign_hashes(CONFIG_PATH, self.config)
             )
-            self.assertEqual(analyzed["plot_count"], 12)
+            self.assertEqual(analyzed["plot_count"], 15)
             self.assertTrue((run_dir / "analyze" / "RESULTS.md").is_file())
             results = (run_dir / "analyze" / "RESULTS.md").read_text(
                 encoding="utf-8"

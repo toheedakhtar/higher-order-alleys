@@ -41,17 +41,19 @@ must all run in the same unchanged CUDA environment.
 
 ## CUDA-host sequence
 
-The original `assets/psr` through `assets/psr-v6` campaigns are retained as
-diagnostics. In particular, `psr-v6` failed because the declared alpha grid
-jumped from the weak point at `0.10` to an overshooting point at `0.20`. The
-declared `psr-v7` grid adds `0.11`, `0.125`, and `0.15` without changing any
-selection threshold or fallback rule. Start a fresh `assets/psr-v7` campaign
+The original `assets/psr` through `assets/psr-v7` campaigns are retained as
+diagnostics. `psr-v7` passed engineering smoke and alpha calibration but its
+same-layer entropy/orthogonal alternative failed the paired support-match gate.
+`psr-v8` keeps every support threshold and instead uses the identical
+answer-support-reducing objective at one layer selected from the predeclared
+full-attention set `{15, 19, 23}`. Each targeted mechanism has its own
+same-layer norm-matched random control. Start a fresh `assets/psr-v8` campaign
 on the same CUDA host:
 
 ```bash
-python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v7
-python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v7
-python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v7
+python -m experiments.process_sensitive_replay.runner --phase validate --run-dir assets/psr-v8
+python -m experiments.process_sensitive_replay.runner --phase answer_bank --run-dir assets/psr-v8
+python -m experiments.process_sensitive_replay.runner --phase pre_discovery_smoke --run-dir assets/psr-v8
 ```
 
 The pre-discovery smoke validates replay/token parity, hybrid state cloning,
@@ -66,16 +68,17 @@ transcript token hashes are exact critical gates.
 After pre-discovery smoke passes, run discovery and freeze in order:
 
 ```bash
-python -m experiments.process_sensitive_replay.runner --phase discovery --run-dir assets/psr-v7
-python -m experiments.process_sensitive_replay.runner --phase freeze --run-dir assets/psr-v7
-python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v7
-python -m experiments.process_sensitive_replay.runner --phase heldout --run-dir assets/psr-v7
-python -m experiments.process_sensitive_replay.runner --phase analyze --run-dir assets/psr-v7
+python -m experiments.process_sensitive_replay.runner --phase discovery --run-dir assets/psr-v8
+python -m experiments.process_sensitive_replay.runner --phase freeze --run-dir assets/psr-v8
+python -m experiments.process_sensitive_replay.runner --phase post_freeze_smoke --run-dir assets/psr-v8
+python -m experiments.process_sensitive_replay.runner --phase heldout --run-dir assets/psr-v8
+python -m experiments.process_sensitive_replay.runner --phase analyze --run-dir assets/psr-v8
 ```
 
 Discovery uses only the 16 IDs in `split_manifest.json`. It completes the alpha
-grid and selects global weak/strong alpha before beginning the separate beta
-support-matching pass. It then saves full-vocabulary discovery scores and
+grid and selects global weak/strong alpha before evaluating the predeclared
+alternative-layer/global-beta grid using support, integrity, and perturbation
+size only. It then saves full-vocabulary discovery scores and
 deterministic candidate metrics and selects up to three cosine-deduplicated
 token/layer directions. Freeze is model-free and validates every source and
 direction-file hash before writing `frozen_protocol.json`.
@@ -102,7 +105,7 @@ statistics, all required plots, hashes, and the conservative interpretation
 ceiling. Smoke summaries are phase-local, so post-freeze execution cannot
 overwrite pre-discovery summaries.
 
-`RESULTS.md` reports H1-H7, both structured-minus-random contrasts, and the
+`RESULTS.md` reports H1-H7, both structured-minus-own-layer-random contrasts, and the
 reset/convergence diagnostics descriptively. It does not automatically call a
 candidate process-sensitive or M(P)-like because no numerical held-out
 convergence decision threshold has been frozen.

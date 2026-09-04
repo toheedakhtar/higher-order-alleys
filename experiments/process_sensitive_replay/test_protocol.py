@@ -92,6 +92,7 @@ class ProtocolTests(unittest.TestCase):
             "weak_alpha": 0.02,
             "strong_alpha": 0.1,
             "beta": 0.2,
+            "alternative_layer": 19,
             "candidate_selection": self.config["candidate_selection"],
             "support_matching": self.config["support_matching"],
             "conditions": self.config["conditions"],
@@ -165,21 +166,32 @@ class DiscoveryTests(unittest.TestCase):
 
     def test_beta_selection_minimizes_mismatch_subject_to_all_gates(self) -> None:
         trials = []
-        for beta in self.config["strengths"]["beta_grid"]:
-            alternative = 2.0 + abs(float(beta) - 0.2)
-            trials.append(BetaTrial(
-                float(beta), tuple([2.0] * 16), tuple([alternative] * 16),
-                median_norm_ratio=2.0, max_abs_cosine=0.05,
-            ))
+        for layer in self.config["layers"]["alternative_candidates"]:
+            for beta in self.config["strengths"]["beta_grid"]:
+                alternative = (
+                    2.0 + abs(float(beta) - 0.2) + abs(int(layer) - 19) * 0.01
+                )
+                trials.append(BetaTrial(
+                    alternative_layer=int(layer),
+                    beta=float(beta),
+                    targeted_support_drops=tuple([2.0] * 16),
+                    alternative_support_drops=tuple([alternative] * 16),
+                    median_norm_ratio=2.0,
+                ))
         selected = select_beta_strength(trials, self.config)
         self.assertEqual(selected["beta"], 0.2)
+        self.assertEqual(selected["alternative_layer"], 19)
 
-    def test_beta_selection_rejects_norm_or_cosine_failures(self) -> None:
+    def test_beta_selection_rejects_norm_failures(self) -> None:
         trials = [
             BetaTrial(
-                float(beta), tuple([2.0] * 16), tuple([2.0] * 16),
-                median_norm_ratio=5.0, max_abs_cosine=0.05,
+                alternative_layer=int(layer),
+                beta=float(beta),
+                targeted_support_drops=tuple([2.0] * 16),
+                alternative_support_drops=tuple([2.0] * 16),
+                median_norm_ratio=5.0,
             )
+            for layer in self.config["layers"]["alternative_candidates"]
             for beta in self.config["strengths"]["beta_grid"]
         ]
         with self.assertRaisesRegex(RuntimeError, "support_match_gate_failed"):

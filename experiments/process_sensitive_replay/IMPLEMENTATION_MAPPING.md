@@ -11,6 +11,9 @@ It is not a modification of the frozen scientific protocol.
 - Text decoder used by J-Lens: `model.language_model`.
 - Decoder shape: 64 blocks, residual width 5120.
 - Layer 31 is zero-based and is a `full_attention` block.
+- Predeclared alternative layers 15, 19, and 23 are also `full_attention`
+  blocks. They are 16, 12, and 8 layers before layer 31 and below readout layer
+  40. The pinned architecture metadata is checked at runtime.
 - The checkpoint alternates three `linear_attention` blocks with one
   `full_attention` block.
 - Transformers 5.15.1 constructs `DynamicCache(config=model.config)` with
@@ -23,9 +26,11 @@ It is not a modification of the frozen scientific protocol.
   generation branch therefore receives a deep, storage-disjoint clone whose
   source digest is checked after the branch runs.
 
-The intervention hook is attached to the output of block 31. Its own K/V state
-has already been computed at that point, so layers 0–31 must retain clean cache
-digests while at least one layer 32–63 must change. That is enforced directly.
+Each intervention hook is attached to the output of its declared block. That
+block's own state has already been computed, so cache layers through the
+intervention layer must retain clean digests while at least one later layer
+must change. This is enforced separately for layer 31 and the frozen earlier
+alternative layer.
 
 ## J-Lens
 
@@ -50,8 +55,8 @@ digests while at least one layer 32–63 must change. That is enforced directly.
    token IDs and deterministic discovery/held-out membership.
 3. Run pre-discovery engineering smoke over discovery items only.
 4. Permit discovery only after that smoke gate passes.
-5. Re-run all critical checks after discovery freezes alpha, beta, and
-   candidates.
+5. Re-run all critical checks after discovery freezes alpha, the alternative
+   layer/global beta pair, and candidates.
 6. Permit held-out execution only after the post-freeze smoke gate passes.
 7. Execute held-out replay with frozen strengths/candidates, enforce aggregate
    and item-level support matching fail-closed, and retain item-level matching
@@ -59,9 +64,14 @@ digests while at least one layer 32–63 must change. That is enforced directly.
 8. Run model-free H1-H7 statistics and required plotting only after a valid
    held-out gate, with the process-sensitive/M(P)-like interpretation ceiling.
 
-The `psr-v7` amendment adds alpha points `0.11`, `0.125`, and `0.15` between
-the `psr-v6` weak point and overshooting `0.20` point. No selector, threshold,
-fallback, split, prompt, intervention, or held-out rule changed.
+`psr-v7` selected the improved alpha grid but failed the paired support-match
+gate for its same-layer entropy/orthogonal alternative. `psr-v8` retains every
+threshold and fail-closed rule while replacing that alternative with the same
+answer-support-reducing objective at one discovery-selected layer from the
+predeclared full-attention set `{15, 19, 23}`. Discovery selects a single
+layer/global-beta pair without J-space, confidence, correctness, or held-out
+inputs. Both the primary and alternative mechanisms have distinct exact
+same-layer norm-matched random controls.
 
 Discovery and freeze are now executable. Discovery performs the complete
 16-item alpha grid and freezes weak/strong alpha before beginning the separate
@@ -107,7 +117,7 @@ next phase.
 - A post-freeze support-match failure writes phase-local `trials.jsonl`, the
   aggregate smoke report, and per-item support diagnostics before returning a
   nonzero status and withholding the success marker.
-- Held-out reporting includes both structured-minus-random contrasts and is
+- Held-out reporting includes both structured-minus-own-layer-random contrasts and is
   descriptive only; no candidate is automatically classified without an
   approved frozen convergence decision rule.
 
@@ -123,8 +133,9 @@ next phase.
 - An ordinary `DynamicCache` replay runs alongside the differentiable pass.
   Every intended position must pass full-logit and layer-31 residual parity;
   total answer support must also pass at the frozen `1e-5` tolerances.
-- Answer-support and entropy gradients must be finite and nonzero. Gradient
-  and intervention hooks must fire exactly at answer-predicting positions.
+- Answer-support gradients at the primary and alternative layers must be
+  finite and nonzero. Gradient and intervention hooks must fire exactly at
+  answer-predicting positions.
   Any mismatch is fail-closed and logged with its numerical differences.
 
 ## Suffix-only Turn-3 compatibility correction

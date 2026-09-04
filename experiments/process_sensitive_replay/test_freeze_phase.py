@@ -20,6 +20,27 @@ CONFIG_PATH = Path(__file__).with_name("experiment_config.json")
 
 
 class FreezePhaseTests(unittest.TestCase):
+    def test_freeze_reports_failed_discovery_before_missing_artifacts(self) -> None:
+        config = load_config(CONFIG_PATH)
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            initialize_run_dir(run_dir, CONFIG_PATH, config)
+            hashes = campaign_hashes(CONFIG_PATH, config)
+            write_gate(run_dir, GateStatus(
+                phase="discovery",
+                status="invalid_support_match",
+                protocol_hash=combined_protocol_hash(hashes),
+                input_hashes=dict(hashes),
+                measurements={},
+                reason="support_match_gate_failed",
+            ))
+
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "prerequisite discovery is invalid_support_match, not passed",
+            ):
+                run_freeze_phase(run_dir, config, hashes)
+
     def test_freeze_writes_hash_bound_protocol_without_loading_model(self) -> None:
         config = load_config(CONFIG_PATH)
         with tempfile.TemporaryDirectory() as temporary:
@@ -111,6 +132,7 @@ class FreezePhaseTests(unittest.TestCase):
                 "weak_alpha": 0.02,
                 "strong_alpha": 0.1,
                 "beta": 0.2,
+                "alternative_layer": 19,
                 "strength_selection": {},
                 "candidates": [candidate],
                 "candidate_token_ids": [123],

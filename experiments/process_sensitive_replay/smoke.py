@@ -39,16 +39,21 @@ def _schedule(
     item_id: str,
     family: str,
     strength: float,
+    process_layer: int,
 ) -> InterventionSchedule:
+    if int(bundle.process_layer) != int(process_layer):
+        raise AssertionError("gradient bundle layer does not match intervention layer")
     return InterventionSchedule(
-        process_layer=int(config["layers"]["process"]),
+        process_layer=int(process_layer),
         positions=build_interventions(
             bundle,
             family=family,
             strength=float(strength),
             campaign_seed=int(config["split"]["seed"]),
             item_id=item_id,
-            max_abs_cosine=float(config["alternative"]["max_abs_cosine_with_answer_gradient"]),
+            max_abs_cosine=float(
+                config["alternative"]["random_max_abs_cosine_with_answer_gradient"]
+            ),
         ),
     )
 
@@ -198,12 +203,13 @@ def run_smoke_item(
     if include_full_vocab and phase != "discovery":
         raise ValueError("full-vocabulary readout is restricted to discovery")
     item_id = str(answer["item_id"])
+    primary_layer = int(config["layers"]["process"])
     bundle = compute_clean_gradients(
         adapter,
         answer["post_answer_token_ids"],
         prefix_length=len(answer["question_prefix_token_ids"]),
         answer_token_ids=answer["answer_token_ids"],
-        process_layer=int(config["layers"]["process"]),
+        process_layer=primary_layer,
         atol=float(config["reset_parity"]["absolute_tolerance"]),
         rtol=float(config["reset_parity"]["relative_tolerance"]),
     )
@@ -224,6 +230,30 @@ def run_smoke_item(
         rtol=rtol,
         context="clean recurrent gradient per-token answer log probabilities",
     )
+    layer_types = list(adapter.text_config.layer_types)
+    expected_length = len(answer["post_answer_token_ids"])
+
+    def validate_grid_replay(outcome: Any, *, intervention_layer: int) -> None:
+        assert_hybrid_cache_integrity(
+            outcome.cache,
+            layer_types=layer_types,
+            expected_sequence_length=expected_length,
+        )
+        if (
+            outcome.transcript_hash != clean.transcript_hash
+            or outcome.question_token_hash != clean.question_token_hash
+            or outcome.answer_token_hash != clean.answer_token_hash
+        ):
+            raise AssertionError("engineering grid visible-token parity failed")
+        if outcome.process_hook_positions != outcome.intervention_positions:
+            raise AssertionError("engineering grid intervention hook scope failed")
+        if not math.isfinite(float(outcome.answer_sequence_logp)):
+            raise AssertionError("engineering grid produced non-finite support")
+        assert_process_propagated(
+            clean.cache_audit,
+            outcome.cache_audit,
+            process_layer=int(intervention_layer),
+        )
 
     alpha_values = (
         [float(frozen_protocol["weak_alpha"]), float(frozen_protocol["strong_alpha"])]
@@ -235,30 +265,111 @@ def run_smoke_item(
         if frozen_protocol is not None
         else [float(value) for value in config["strengths"]["beta_grid"]]
     )
-    target_grid: dict[float, Any] = {}
-    target_schedules: dict[float, InterventionSchedule] = {}
-    for alpha in alpha_values:
-        schedule = _schedule(bundle, config, item_id=item_id, family="targeted", strength=alpha)
-        target_grid[alpha] = _replay(adapter, answer, schedule)
-        target_schedules[alpha] = schedule
-    alternative_grid: dict[float, Any] = {}
-    alternative_schedules: dict[float, InterventionSchedule] = {}
-    for beta in beta_values:
-        schedule = _schedule(bundle, config, item_id=item_id, family="alternative", strength=beta)
-        alternative_grid[beta] = _replay(adapter, answer, schedule)
-        alternative_schedules[beta] = schedule
-
+    alternative_layers = (
+        [int(frozen_protocol["alternative_layer"])]
+        if frozen_protocol is not None
+        else [int(value) for value in config["layers"]["alternative_candidates"]]
+    )
     strong_alpha = (
         float(frozen_protocol["strong_alpha"])
         if frozen_protocol is not None else max(alpha_values)
     )
-    selected_beta = float(frozen_protocol["beta"]) if frozen_protocol is not None else max(beta_values)
+    selected_beta = (
+        float(frozen_protocol["beta"])
+        if frozen_protocol is not None else max(beta_values)
+    )
+    selected_alternative_layer = (
+        int(frozen_protocol["alternative_layer"])
+        if frozen_protocol is not None else max(alternative_layers)
+    )
+    selected_alternative_key = (selected_alternative_layer, selected_beta)
+    alternative_bundles: dict[int, Any] = {}
+    for alternative_layer in alternative_layers:
+        alternative_bundle = compute_clean_gradients(
+            adapter,
+            answer["post_answer_token_ids"],
+            prefix_length=len(answer["question_prefix_token_ids"]),
+            answer_token_ids=answer["answer_token_ids"],
+            process_layer=alternative_layer,
+            atol=atol,
+            rtol=rtol,
+        )
+        if not math.isclose(
+            clean.answer_sequence_logp,
+            alternative_bundle.answer_sequence_logp,
+            abs_tol=atol,
+            rel_tol=rtol,
+        ):
+            raise AssertionError(
+                f"alternative layer {alternative_layer} recurrent/cached support parity failed"
+            )
+        assert_numeric_parity(
+            torch.tensor(clean.token_logprobs),
+            torch.tensor(alternative_bundle.token_logprobs),
+            atol=atol,
+            rtol=rtol,
+            context=(
+                f"alternative layer {alternative_layer} recurrent gradient per-token "
+                "answer log probabilities"
+            ),
+        )
+        alternative_bundles[alternative_layer] = alternative_bundle
+    target_grid: dict[float, Any] = {}
+    target_support_grid: dict[float, float] = {}
+    target_schedules: dict[float, InterventionSchedule] = {}
+    for alpha in alpha_values:
+        schedule = _schedule(
+            bundle, config, item_id=item_id, family="targeted", strength=alpha,
+            process_layer=primary_layer,
+        )
+        outcome = _replay(adapter, answer, schedule)
+        validate_grid_replay(outcome, intervention_layer=primary_layer)
+        target_support_grid[alpha] = float(outcome.answer_sequence_logp)
+        retained_alphas = (
+            {float(frozen_protocol["weak_alpha"]), strong_alpha}
+            if frozen_protocol is not None else {strong_alpha}
+        )
+        if alpha in retained_alphas:
+            target_grid[alpha] = outcome
+        target_schedules[alpha] = schedule
+    alternative_grid: dict[tuple[int, float], Any] = {}
+    alternative_support_grid: dict[tuple[int, float], float] = {}
+    alternative_schedules: dict[tuple[int, float], InterventionSchedule] = {}
+    for alternative_layer, alternative_bundle in alternative_bundles.items():
+        for beta in beta_values:
+            key = (alternative_layer, beta)
+            schedule = _schedule(
+                alternative_bundle,
+                config,
+                item_id=item_id,
+                family="alternative_targeted",
+                strength=beta,
+                process_layer=alternative_layer,
+            )
+            outcome = _replay(adapter, answer, schedule)
+            validate_grid_replay(outcome, intervention_layer=alternative_layer)
+            alternative_support_grid[key] = float(outcome.answer_sequence_logp)
+            if key == selected_alternative_key:
+                alternative_grid[key] = outcome
+            alternative_schedules[key] = schedule
     targeted = target_grid[strong_alpha]
-    alternative = alternative_grid[selected_beta]
+    alternative = alternative_grid[selected_alternative_key]
     random_schedule = _schedule(
-        bundle, config, item_id=item_id, family="random", strength=strong_alpha
+        bundle, config, item_id=item_id, family="random", strength=strong_alpha,
+        process_layer=primary_layer,
     )
     random_control = _replay(adapter, answer, random_schedule)
+    alternative_random_schedule = _schedule(
+        alternative_bundles[selected_alternative_layer],
+        config,
+        item_id=item_id,
+        family="alternative_random",
+        strength=selected_beta,
+        process_layer=selected_alternative_layer,
+    )
+    alternative_random_control = _replay(
+        adapter, answer, alternative_random_schedule
+    )
     targeted_reset = _replay(adapter, answer, None)
     clean_reset = _replay(adapter, answer, None)
     outcomes = {
@@ -266,6 +377,7 @@ def run_smoke_item(
         "targeted_strong_preserved": targeted,
         "random_strong_preserved": random_control,
         "support_matched_alternative_preserved": alternative,
+        "alternative_random_preserved": alternative_random_control,
         "targeted_strong_reset": targeted_reset,
         "clean_reset": clean_reset,
     }
@@ -281,8 +393,6 @@ def run_smoke_item(
             )
     if len({id(outcome.cache) for outcome in outcomes.values()}) != len(outcomes):
         raise AssertionError("experimental conditions share a cache object")
-    layer_types = list(adapter.text_config.layer_types)
-    expected_length = len(answer["post_answer_token_ids"])
     for outcome in outcomes.values():
         assert_hybrid_cache_integrity(
             outcome.cache,
@@ -296,16 +406,30 @@ def run_smoke_item(
             raise AssertionError("replay produced non-finite answer support or logits")
     assert_process_propagated(
         clean.cache_audit, targeted.cache_audit,
-        process_layer=int(config["layers"]["process"]),
+        process_layer=primary_layer,
     )
     assert_process_propagated(
         clean.cache_audit, random_control.cache_audit,
-        process_layer=int(config["layers"]["process"]),
+        process_layer=primary_layer,
     )
     assert_process_propagated(
         clean.cache_audit, alternative.cache_audit,
-        process_layer=int(config["layers"]["process"]),
+        process_layer=selected_alternative_layer,
     )
+    assert_process_propagated(
+        clean.cache_audit, alternative_random_control.cache_audit,
+        process_layer=selected_alternative_layer,
+    )
+    manipulated_digests = {
+        targeted.cache_audit.digest,
+        random_control.cache_audit.digest,
+        alternative.cache_audit.digest,
+        alternative_random_control.cache_audit.digest,
+    }
+    if len(manipulated_digests) != 4:
+        raise AssertionError(
+            "targeted mechanisms/random controls produced aliased persistent states"
+        )
     if targeted.cache_audit.digest == clean.cache_audit.digest:
         raise AssertionError("targeted cache was accidentally replaced by clean cache")
     if targeted_reset.cache_audit.digest != clean.cache_audit.digest:
@@ -318,8 +442,31 @@ def run_smoke_item(
     )
     target_drop = clean.answer_sequence_logp - targeted.answer_sequence_logp
     alternative_drop = clean.answer_sequence_logp - alternative.answer_sequence_logp
+    alternative_random_drop = (
+        clean.answer_sequence_logp
+        - alternative_random_control.answer_sequence_logp
+    )
     if target_drop <= 0 and phase in {"pre_discovery_smoke", "post_freeze_smoke"}:
         raise AssertionError("targeted intervention did not reduce answer support")
+    if phase == "pre_discovery_smoke":
+        smallest_alpha = min(alpha_values)
+        if (
+            clean.answer_sequence_logp
+            - target_support_grid[smallest_alpha]
+        ) <= 0:
+            raise AssertionError(
+                "primary negative-gradient finite-difference sign check failed"
+            )
+        smallest_beta = min(beta_values)
+        for alternative_layer in alternative_layers:
+            if (
+                clean.answer_sequence_logp
+                - alternative_support_grid[(alternative_layer, smallest_beta)]
+            ) <= 0:
+                raise AssertionError(
+                    "alternative negative-gradient finite-difference sign check failed "
+                    f"at layer {alternative_layer}"
+                )
 
     explicit = [int(value) for value in config["readout"]["generic_evaluator_token_ids"]]
     if frozen_protocol is not None:
@@ -485,8 +632,24 @@ def run_smoke_item(
         )
     alternative_norms = [
         float(torch.linalg.vector_norm(value.delta.float()).item())
-        for value in alternative_schedules[selected_beta].positions.values()
+        for value in alternative_schedules[selected_alternative_key].positions.values()
     ]
+    for position in alternative_schedules[selected_alternative_key].positions:
+        alternative_target_norm = torch.linalg.vector_norm(
+            alternative_schedules[selected_alternative_key]
+            .positions[position]
+            .delta.float()
+        )
+        alternative_random_norm = torch.linalg.vector_norm(
+            alternative_random_schedule.positions[position].delta.float()
+        )
+        assert_numeric_parity(
+            alternative_target_norm.reshape(1),
+            alternative_random_norm.reshape(1),
+            atol=1e-5,
+            rtol=1e-5,
+            context=f"alternative random norm position {position}",
+        )
     targeted_norms = [
         float(torch.linalg.vector_norm(value.delta.float()).item())
         for value in targeted_specs.values()
@@ -500,12 +663,13 @@ def run_smoke_item(
         raise AssertionError("support-matched alternative exceeds perturbation-norm ceiling")
 
     def intervention_records(
-        specs: Mapping[int, Any], *, condition: str, support_after: float
+        specs: Mapping[int, Any], *, condition: str, support_after: float,
+        process_layer: int,
     ) -> list[dict[str, Any]]:
         return [
             {
                 "condition": condition,
-                "process_layer": int(config["layers"]["process"]),
+                "process_layer": int(process_layer),
                 "token_index": value.position,
                 "token_id": value.token_id,
                 "token": tokenizer.decode(
@@ -514,10 +678,11 @@ def run_smoke_item(
                 "family": value.family,
                 "strength": value.strength,
                 "alpha": value.strength if value.family in {"targeted", "random"} else None,
-                "beta": value.strength if value.family == "alternative" else None,
+                "beta": value.strength if value.family in {
+                    "alternative_targeted", "alternative_random"
+                } else None,
                 "residual_norm": value.residual_norm,
                 "answer_gradient_norm": value.answer_gradient_norm,
-                "alternative_gradient_norm": value.alternative_gradient_norm,
                 "perturbation_norm": float(torch.linalg.vector_norm(value.delta.float()).item()),
                 "direction_cosine": value.direction_cosine,
                 "rng_seed": value.rng_seed,
@@ -539,7 +704,8 @@ def run_smoke_item(
         intervention_records_all.extend(intervention_records(
             schedule.positions,
             condition=label,
-            support_after=target_grid[alpha].answer_sequence_logp,
+            support_after=target_support_grid[alpha],
+            process_layer=primary_layer,
         ))
         if (
             frozen_protocol is not None
@@ -548,49 +714,81 @@ def run_smoke_item(
             reset_rows = intervention_records(
                 schedule.positions,
                 condition="targeted_strong_reset",
-                support_after=target_grid[alpha].answer_sequence_logp,
+                support_after=target_support_grid[alpha],
+                process_layer=primary_layer,
             )
             for row in reset_rows:
                 row["state_disposition"] = "discarded_and_reconstructed_clean_before_turn3"
             intervention_records_all.extend(reset_rows)
-    for beta, schedule in alternative_schedules.items():
+    for (alternative_layer, beta), schedule in alternative_schedules.items():
         label = (
             "support_matched_alternative_preserved"
             if frozen_protocol is not None
-            else f"engineering_alternative_beta_{beta:g}"
+            else f"engineering_alternative_layer_{alternative_layer}_beta_{beta:g}"
         )
         intervention_records_all.extend(intervention_records(
             schedule.positions,
             condition=label,
-            support_after=alternative_grid[beta].answer_sequence_logp,
+            support_after=alternative_support_grid[(alternative_layer, beta)],
+            process_layer=alternative_layer,
         ))
     intervention_records_all.extend(intervention_records(
         random_specs,
         condition="random_strong_preserved",
         support_after=random_control.answer_sequence_logp,
+        process_layer=primary_layer,
+    ))
+    intervention_records_all.extend(intervention_records(
+        alternative_random_schedule.positions,
+        condition="alternative_random_preserved",
+        support_after=alternative_random_control.answer_sequence_logp,
+        process_layer=selected_alternative_layer,
     ))
     result = {
         "item_id": item_id,
         "phase": phase,
         "gradient": {
             "clean_support": bundle.answer_sequence_logp,
+            "primary_layer": primary_layer,
             "predictor_positions": list(bundle.predictor_positions),
             "answer_token_ids": list(bundle.answer_token_ids),
             "token_logprobs": list(bundle.token_logprobs),
             "parity": bundle.parity,
+            "alternative_layers": {
+                str(layer): {
+                    "clean_support": alternative_bundle.answer_sequence_logp,
+                    "predictor_positions": list(
+                        alternative_bundle.predictor_positions
+                    ),
+                    "answer_token_ids": list(alternative_bundle.answer_token_ids),
+                    "token_logprobs": list(alternative_bundle.token_logprobs),
+                    "parity": alternative_bundle.parity,
+                }
+                for layer, alternative_bundle in alternative_bundles.items()
+            },
         },
         "support": {
             "clean": clean.answer_sequence_logp,
-            "target_grid": {str(key): value.answer_sequence_logp for key, value in target_grid.items()},
-            "alternative_grid": {str(key): value.answer_sequence_logp for key, value in alternative_grid.items()},
+            "target_grid": {
+                str(key): value for key, value in target_support_grid.items()
+            },
+            "alternative_grid": {
+                str(layer): {
+                    str(beta): alternative_support_grid[(layer, beta)]
+                    for beta in beta_values
+                }
+                for layer in alternative_layers
+            },
+            "alternative_layer": selected_alternative_layer,
             "targeted_drop": target_drop,
             "alternative_drop": alternative_drop,
             "random_drop": clean.answer_sequence_logp - random_control.answer_sequence_logp,
+            "alternative_random_drop": alternative_random_drop,
             "condition_drops": {
                 "clean_preserved": 0.0,
                 "targeted_weak_preserved": (
                     clean.answer_sequence_logp
-                    - target_grid[float(frozen_protocol["weak_alpha"])].answer_sequence_logp
+                    - target_support_grid[float(frozen_protocol["weak_alpha"])]
                     if frozen_protocol is not None else None
                 ),
                 "targeted_strong_preserved": target_drop,
@@ -598,6 +796,7 @@ def run_smoke_item(
                     clean.answer_sequence_logp - random_control.answer_sequence_logp
                 ),
                 "support_matched_alternative_preserved": alternative_drop,
+                "alternative_random_preserved": alternative_random_drop,
                 # The targeted first-order process occurred; only its stored
                 # state is discarded and reconstructed cleanly before Turn 3.
                 "targeted_strong_reset": target_drop,
@@ -633,6 +832,8 @@ def run_smoke_item(
             "gradient_residual_parity": True,
             "gradient_finite_nonzero": True,
             "gradient_hook_scope": True,
+            "gradient_sign_finite_difference": True,
+            "alternative_gradient_parity": True,
             "intervention_hook_scope": True,
             "hybrid_cache_integrity": True,
             "downstream_state_changed": True,
@@ -641,6 +842,7 @@ def run_smoke_item(
             "turn3_suffix_integrity": True,
             "turn3_process_hook_calls": turn3_process_hook_calls,
             "random_norm_match": True,
+            "alternative_random_norm_match": True,
             "alternative_norm_ceiling": True,
         },
     }
@@ -664,8 +866,11 @@ def summarize_smoke(
         "random_norm_match", "alternative_norm_ceiling",
         "gradient_token_logit_parity", "gradient_total_support_parity",
         "gradient_residual_parity", "gradient_finite_nonzero",
-        "gradient_hook_scope", "intervention_hook_scope",
+        "gradient_hook_scope", "alternative_gradient_parity",
+        "gradient_sign_finite_difference",
+        "intervention_hook_scope",
         "turn3_suffix_integrity",
+        "alternative_random_norm_match",
     }
     for record in records:
         checks = record["checks"]

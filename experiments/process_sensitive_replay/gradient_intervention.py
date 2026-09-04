@@ -65,9 +65,9 @@ class GradientBundle:
     answer_token_ids: tuple[int, ...]
     answer_sequence_logp: float
     answer_gradients: torch.Tensor
-    entropy_gradients: torch.Tensor
     clean_residuals: torch.Tensor
     clean_residual_norms: torch.Tensor
+    process_layer: int = -1
     token_logprobs: tuple[float, ...] = ()
     parity: dict[str, Any] = field(default_factory=dict)
 
@@ -81,7 +81,6 @@ class PositionIntervention:
     delta: torch.Tensor
     residual_norm: float
     answer_gradient_norm: float
-    alternative_gradient_norm: float | None
     direction_cosine: float
     rng_seed: int | None
     used_fallback: bool
@@ -173,7 +172,7 @@ def _recurrent_gradient_pass(
     *,
     atol: float,
     rtol: float,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, float, tuple[float, ...], dict[str, Any]]:
+) -> tuple[torch.Tensor, torch.Tensor, float, tuple[float, ...], dict[str, Any]]:
     positions = tuple(int(value) for value in predictor_positions)
     targets = tuple(int(value) for value in answer_token_ids)
     if len(positions) != len(targets) or not positions:
@@ -185,7 +184,6 @@ def _recurrent_gradient_pass(
     residuals: list[torch.Tensor] = []
     support_terms: list[torch.Tensor] = []
     functional_logprob_values: list[float] = []
-    entropy_terms: list[torch.Tensor] = []
     reference_logprobs: list[float] = []
     hook_positions: list[int] = []
     reference_capture_positions: list[int] = []
@@ -276,8 +274,6 @@ def _recurrent_gradient_pass(
         support_terms.append(functional_log_probs[target])
         functional_logprob_values.append(float(functional_log_probs[target].detach().item()))
         reference_logprobs.append(float(reference_log_probs[target].item()))
-        probabilities = functional_log_probs.exp()
-        entropy_terms.append(-(probabilities * functional_log_probs).sum())
 
     if tuple(hook_positions) != positions:
         raise AssertionError(
@@ -289,7 +285,6 @@ def _recurrent_gradient_pass(
             f"expected {positions}, observed {tuple(reference_capture_positions)}"
         )
     support = torch.stack(support_terms).sum()
-    entropy = torch.stack(entropy_terms).sum()
     reference_support = float(sum(reference_logprobs))
     support_value = float(sum(functional_logprob_values))
     if not math.isclose(support_value, reference_support, abs_tol=atol, rel_tol=rtol):
@@ -299,23 +294,15 @@ def _recurrent_gradient_pass(
             f"abs_diff={abs(support_value - reference_support):.9g}"
         )
 
-    support_gradients = torch.autograd.grad(support, roots, retain_graph=True)
-    entropy_gradients = torch.autograd.grad(entropy, roots, retain_graph=False)
+    support_gradients = torch.autograd.grad(support, roots, retain_graph=False)
     support_gradient = torch.stack(
         [value[0, -1, :].detach().float().cpu() for value in support_gradients]
     )
-    entropy_gradient = torch.stack(
-        [value[0, -1, :].detach().float().cpu() for value in entropy_gradients]
-    )
-    for name, gradient in (
-        ("answer-support", support_gradient),
-        ("entropy", entropy_gradient),
-    ):
-        norms = torch.linalg.vector_norm(gradient, dim=-1)
-        if not torch.isfinite(gradient).all() or bool((norms <= 1e-12).any()):
-            raise RuntimeError(
-                f"{name} gradient is non-finite or zero at an intended position"
-            )
+    norms = torch.linalg.vector_norm(support_gradient, dim=-1)
+    if not torch.isfinite(support_gradient).all() or bool((norms <= 1e-12).any()):
+        raise RuntimeError(
+            "answer-support gradient is non-finite or zero at an intended position"
+        )
 
     parity = {
         "method": "differentiable_token_by_token_recurrent",
@@ -329,7 +316,6 @@ def _recurrent_gradient_pass(
         "total_answer_support_parity": True,
         "intervention_layer_residual_parity": True,
         "finite_nonzero_answer_gradients": True,
-        "finite_nonzero_entropy_gradients": True,
         "reference_answer_sequence_logp": reference_support,
         "gradient_answer_sequence_logp": support_value,
         "support_absolute_difference": abs(support_value - reference_support),
@@ -340,7 +326,6 @@ def _recurrent_gradient_pass(
     }
     return (
         support_gradient,
-        entropy_gradient,
         torch.cat(residuals, dim=0),
         support_value,
         tuple(reference_logprobs),
@@ -363,7 +348,6 @@ def compute_clean_gradients(
     adapter.hf_model.requires_grad_(False)
     (
         answer_gradient,
-        entropy_gradient,
         residuals,
         support,
         token_logprobs,
@@ -387,9 +371,9 @@ def compute_clean_gradients(
         answer_token_ids=tuple(int(value) for value in answer_token_ids),
         answer_sequence_logp=support,
         answer_gradients=answer_gradient,
-        entropy_gradients=entropy_gradient,
         clean_residuals=residuals,
         clean_residual_norms=torch.linalg.vector_norm(residuals, dim=-1),
+        process_layer=int(process_layer),
         token_logprobs=token_logprobs,
         parity=parity,
     )
@@ -413,29 +397,23 @@ def build_interventions(
         if not torch.isfinite(torch.tensor(residual_norm)) or residual_norm <= 0:
             raise RuntimeError("clean residual norm is non-finite or zero")
         seed: int | None = None
-        alternative_gradient_norm: float | None = None
         used_fallback = False
-        if family == "targeted":
+        if family in {"targeted", "alternative_targeted"}:
             direction = -normalized(gradient)
-        elif family == "random":
+        elif family in {"random", "alternative_random"}:
             seed = deterministic_seed(campaign_seed, item_id, position, family)
             direction = seeded_orthogonal_random(gradient, seed)
-        elif family == "alternative":
-            entropy_gradient = bundle.entropy_gradients[index]
-            alternative_gradient_norm = float(torch.linalg.vector_norm(entropy_gradient.float()).item())
-            if not torch.isfinite(entropy_gradient).all() or not torch.isfinite(torch.tensor(alternative_gradient_norm)):
-                raise RuntimeError("alternative entropy gradient is non-finite")
-            projected = project_orthogonal(entropy_gradient, gradient)
-            try:
-                direction = normalized(projected)
-            except RuntimeError:
-                seed = deterministic_seed(campaign_seed, item_id, position, "alternative_fallback")
-                direction = seeded_orthogonal_random(gradient, seed)
-                used_fallback = True
         else:
             raise ValueError(f"unknown intervention family {family!r}")
         direction_cosine = cosine(direction, gradient)
-        if family != "targeted" and abs(direction_cosine) > float(max_abs_cosine) + 1e-6:
+        if (
+            family in {"targeted", "alternative_targeted"}
+            and abs(direction_cosine + 1.0) > 1e-5
+        ):
+            raise AssertionError(
+                f"{family} direction is not the negative answer-support gradient"
+            )
+        if family in {"random", "alternative_random"} and abs(direction_cosine) > float(max_abs_cosine) + 1e-6:
             raise AssertionError(
                 f"{family} direction cosine {direction_cosine} exceeds {max_abs_cosine}"
             )
@@ -454,7 +432,6 @@ def build_interventions(
             delta=delta.detach().cpu(),
             residual_norm=residual_norm,
             answer_gradient_norm=float(torch.linalg.vector_norm(gradient).item()),
-            alternative_gradient_norm=alternative_gradient_norm,
             direction_cosine=direction_cosine,
             rng_seed=seed,
             used_fallback=used_fallback,
@@ -477,7 +454,6 @@ def intervention_log_rows(
             "strength": spec.strength,
             "h_norm": spec.residual_norm,
             "grad_norm": spec.answer_gradient_norm,
-            "alternative_gradient_norm": spec.alternative_gradient_norm,
             "perturbation_norm": float(torch.linalg.vector_norm(spec.delta.float()).item()),
             "direction_cosine": spec.direction_cosine,
             "rng_seed": spec.rng_seed,

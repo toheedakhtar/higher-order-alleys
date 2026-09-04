@@ -28,11 +28,6 @@ class DiscoveryExecutionTests(unittest.TestCase):
             (0.1, 0.3, 0.7, 1.0, 2.2, 3.0, 4.0, 5.0),
             strict=True,
         ))
-        beta_drops = dict(zip(
-            [float(value) for value in self.config["strengths"]["beta_grid"]],
-            (0.2, 1.0, 2.6, 4.5, 8.0),
-            strict=True,
-        ))
         records = []
         for item_index in range(16):
             alpha_grid = {}
@@ -42,15 +37,19 @@ class DiscoveryExecutionTests(unittest.TestCase):
                     "support_drop": drop,
                     "positions": [{"position": 4, "perturbation_norm": alpha}],
                 }
-            for beta, drop in beta_drops.items():
-                beta_grid[str(beta)] = {
-                    "support_drop": drop,
-                    "positions": [{
-                        "position": 4,
-                        "perturbation_norm": beta,
-                        "direction_cosine": 0.01,
-                    }],
-                }
+            for layer in self.config["layers"]["alternative_candidates"]:
+                beta_grid[str(layer)] = {}
+                for beta in self.config["strengths"]["beta_grid"]:
+                    beta = float(beta)
+                    drop = 2.2 + abs(beta - 0.11) * 5 + abs(layer - 19) * 0.02
+                    beta_grid[str(layer)][str(beta)] = {
+                        "support_drop": drop,
+                        "positions": [{
+                            "position": 4,
+                            "perturbation_norm": beta,
+                            "direction_cosine": -1.0,
+                        }],
+                    }
             records.append({
                 "item_id": str(item_index),
                 "alpha_grid": alpha_grid,
@@ -61,13 +60,14 @@ class DiscoveryExecutionTests(unittest.TestCase):
 
         self.assertEqual(selected["alpha"]["weak_alpha"], 0.1)
         self.assertEqual(selected["alpha"]["strong_alpha"], 0.11)
-        self.assertEqual(selected["beta"]["beta"], 0.2)
+        self.assertEqual(selected["beta"]["beta"], 0.11)
+        self.assertEqual(selected["beta"]["alternative_layer"], 19)
         self.assertTrue(selected["beta"]["diagnostics"]["passed"])
 
     def test_candidate_ranking_uses_oriented_structured_effects(self) -> None:
-        item_count, condition_count, layer_count, vocab_size = 4, 6, 2, 8
+        item_count, condition_count, layer_count, vocab_size = 4, 7, 2, 8
         support = torch.tensor([
-            [0.0, 0.5, 2.0, 0.2, 2.1, 0.0]
+            [0.0, 0.5, 2.0, 0.2, 2.1, 0.25, 2.0]
             for _ in range(item_count)
         ])
         scores = torch.zeros(item_count, condition_count, layer_count, vocab_size)
@@ -76,6 +76,11 @@ class DiscoveryExecutionTests(unittest.TestCase):
             scores[item, :, :, :] = baseline
             scores[item, :, 0, 2] = baseline + 2.0 * support[item]
             scores[item, :, 1, 3] = baseline - 1.5 * support[item]
+            reset_index = DISCOVERY_CANDIDATE_CONDITIONS.index(
+                "targeted_strong_reset"
+            )
+            scores[item, reset_index, 0, 2] = baseline
+            scores[item, reset_index, 1, 3] = baseline
 
         ranking = rank_candidate_grid(
             scores,
@@ -121,8 +126,8 @@ class DiscoveryExecutionTests(unittest.TestCase):
             select_discovery_alpha(records, self.config)
 
     def test_candidate_ranking_fails_closed_without_eligible_direction(self) -> None:
-        scores = torch.zeros(4, 6, 1, 8)
-        support = torch.tensor([[0.0, 0.5, 2.0, 0.2, 2.0, 0.0]] * 4)
+        scores = torch.zeros(4, 7, 1, 8)
+        support = torch.tensor([[0.0, 0.5, 2.0, 0.2, 2.0, 0.25, 2.0]] * 4)
         with self.assertRaisesRegex(RuntimeError, "candidate_selection_gate_failed"):
             rank_candidate_grid(
                 scores,

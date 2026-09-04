@@ -21,9 +21,9 @@ class GradientInterventionTests(unittest.TestCase):
             answer_token_ids=(10, 11),
             answer_sequence_logp=-2.0,
             answer_gradients=torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
-            entropy_gradients=torch.tensor([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
             clean_residuals=torch.tensor([[3.0, 4.0, 0.0], [0.0, 0.0, 2.0]]),
             clean_residual_norms=torch.tensor([5.0, 2.0]),
+            process_layer=3,
         )
 
     def test_autoregressive_predictor_positions(self) -> None:
@@ -38,8 +38,8 @@ class GradientInterventionTests(unittest.TestCase):
         self.assertAlmostEqual(float(specs[4].delta.norm()), 1.0)
         self.assertAlmostEqual(float(specs[5].delta.norm()), 0.4)
 
-    def test_random_and_alternative_are_orthogonal(self) -> None:
-        for family in ("random", "alternative"):
+    def test_same_layer_random_controls_are_orthogonal(self) -> None:
+        for family in ("random", "alternative_random"):
             specs = build_interventions(
                 self.bundle, family=family, strength=0.2,
                 campaign_seed=42, item_id="x", max_abs_cosine=0.1,
@@ -49,6 +49,17 @@ class GradientInterventionTests(unittest.TestCase):
                     abs(cosine(specs[position].delta, self.bundle.answer_gradients[index])),
                     1e-6,
                 )
+
+    def test_alternative_targeted_uses_same_support_reducing_direction(self) -> None:
+        specs = build_interventions(
+            self.bundle, family="alternative_targeted", strength=0.2,
+            campaign_seed=42, item_id="x", max_abs_cosine=0.1,
+        )
+        for index, position in enumerate((4, 5)):
+            self.assertAlmostEqual(
+                cosine(specs[position].delta, self.bundle.answer_gradients[index]),
+                -1.0,
+            )
 
     def test_seed_and_schedule_are_deterministic_and_fail_closed(self) -> None:
         self.assertEqual(

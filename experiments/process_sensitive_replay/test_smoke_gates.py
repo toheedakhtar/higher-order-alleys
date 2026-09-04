@@ -34,6 +34,8 @@ def smoke_record(item_id: str, targeted: float, alternative: float) -> dict:
             "gradient_residual_parity": True,
             "gradient_finite_nonzero": True,
             "gradient_hook_scope": True,
+            "gradient_sign_finite_difference": True,
+            "alternative_gradient_parity": True,
             "intervention_hook_scope": True,
             "hybrid_cache_integrity": True,
             "downstream_state_changed": True,
@@ -42,6 +44,7 @@ def smoke_record(item_id: str, targeted: float, alternative: float) -> dict:
             "turn3_suffix_integrity": True,
             "turn3_process_hook_calls": 0,
             "random_norm_match": True,
+            "alternative_random_norm_match": True,
             "alternative_norm_ceiling": True,
         },
     }
@@ -97,7 +100,12 @@ class SmokeGateTests(unittest.TestCase):
                 patch("experiments.process_sensitive_replay.runner._load_discovery_hashes"),
                 patch(
                     "experiments.process_sensitive_replay.runner._load_and_validate_frozen_protocol",
-                    return_value={"weak_alpha": 0.1, "strong_alpha": 0.11, "beta": 0.2},
+                    return_value={
+                        "weak_alpha": 0.1,
+                        "strong_alpha": 0.11,
+                        "beta": 0.2,
+                        "alternative_layer": 19,
+                    },
                 ),
                 patch("experiments.process_sensitive_replay.runner.assert_phase_prerequisites"),
                 patch(

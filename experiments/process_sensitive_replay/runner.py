@@ -52,6 +52,7 @@ from .protocol import (
     load_dataset,
     gate_path,
     item_support_matched,
+    read_gate,
     sha256_file,
     sha256_json,
     support_match_summary,
@@ -270,6 +271,15 @@ def load_runtime(
     process_layer = int(expected["process"])
     if text_config.layer_types[process_layer] != expected["expected_process_layer_type"]:
         raise RuntimeError("configured process layer is not the expected full-attention layer")
+    for alternative_layer in expected["alternative_candidates"]:
+        if (
+            text_config.layer_types[int(alternative_layer)]
+            != expected["expected_alternative_layer_type"]
+        ):
+            raise RuntimeError(
+                f"configured alternative layer {alternative_layer} is not the expected "
+                f"{expected['expected_alternative_layer_type']} block"
+            )
     if lens is not None:
         missing = sorted(set(int(value) for value in expected["readout"]) - set(lens.source_layers))
         if missing:
@@ -311,6 +321,10 @@ def load_runtime(
         "num_hidden_layers": text_config.num_hidden_layers,
         "hidden_size": text_config.hidden_size,
         "process_layer_type": text_config.layer_types[process_layer],
+        "alternative_layer_types": {
+            str(int(layer)): text_config.layer_types[int(layer)]
+            for layer in expected["alternative_candidates"]
+        },
         "input_device": str(lens_model.input_device),
         "cuda": torch.cuda.is_available(),
         "gpu": torch.cuda.get_device_name(0),
@@ -340,7 +354,8 @@ def _write_trial_summary(run_dir: Path, records: list[Mapping[str, Any]]) -> Non
     path = run_dir / "trial_summary.csv"
     fields = [
         "item_id", "phase", "clean_support", "targeted_drop",
-        "alternative_drop", "random_drop", "reset_parity", "cache_integrity",
+        "alternative_drop", "random_drop", "alternative_random_drop",
+        "reset_parity", "cache_integrity",
     ]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
@@ -353,6 +368,9 @@ def _write_trial_summary(run_dir: Path, records: list[Mapping[str, Any]]) -> Non
                 "targeted_drop": record["support"]["targeted_drop"],
                 "alternative_drop": record["support"]["alternative_drop"],
                 "random_drop": record["support"]["random_drop"],
+                "alternative_random_drop": record["support"][
+                    "alternative_random_drop"
+                ],
                 "reset_parity": record["checks"]["reset_parity"],
                 "cache_integrity": record["checks"]["hybrid_cache_integrity"],
             })
@@ -685,6 +703,7 @@ def _candidate_support_row(
         clean - float(target_grid[str(float(strong_alpha))]),
         float(record["support"]["random_drop"]),
         float(record["support"]["alternative_drop"]),
+        float(record["support"]["alternative_random_drop"]),
         clean - float(target_grid[str(float(strong_alpha))]),
     ]
 
@@ -769,6 +788,17 @@ def heldout_effect_rows(
 ) -> list[dict[str, Any]]:
     rows = []
     conditions = [str(value) for value in config["conditions"]]
+    primary_layer = int(config["layers"]["process"])
+    alternative_layer = int(frozen["alternative_layer"])
+    intervention_layers: dict[str, int | None] = {
+        "clean_preserved": None,
+        "targeted_weak_preserved": primary_layer,
+        "targeted_strong_preserved": primary_layer,
+        "random_strong_preserved": primary_layer,
+        "support_matched_alternative_preserved": alternative_layer,
+        "alternative_random_preserved": alternative_layer,
+        "targeted_strong_reset": primary_layer,
+    }
     for record in records:
         clean_support = float(record["support"]["clean"])
         target_grid = record["support"]["target_grid"]
@@ -781,6 +811,9 @@ def heldout_effect_rows(
             "random_strong_preserved": float(record["support"]["random_drop"]),
             "support_matched_alternative_preserved": float(
                 record["support"]["alternative_drop"]
+            ),
+            "alternative_random_preserved": float(
+                record["support"]["alternative_random_drop"]
             ),
             "targeted_strong_reset": float(record["support"]["targeted_drop"]),
         }
@@ -803,6 +836,7 @@ def heldout_effect_rows(
                         "candidate_orientation": orientation,
                         "branch": str(branch),
                         "condition": condition,
+                        "intervention_layer": intervention_layers[condition],
                         "support_drop": support_drops[condition],
                         "candidate_score": raw_score,
                         "oriented_candidate_score": orientation * raw_score,
@@ -939,6 +973,9 @@ def run_discovery_phase(
         record = {
             **alpha_record,
             "beta_grid": beta_record["beta_grid"],
+            "alternative_gradient_parity": beta_record[
+                "alternative_gradient_parity"
+            ],
             "gradient_parity": {
                 "alpha_pass": alpha_record["gradient_parity"],
                 "beta_pass": beta_record["gradient_parity"],
@@ -956,19 +993,35 @@ def run_discovery_phase(
                 for strength, value in record["alpha_grid"].items()
             },
             "alternative_grid_cache_digests": {
-                strength: value["cache_digest"]
-                for strength, value in record["beta_grid"].items()
+                layer: {
+                    strength: value["cache_digest"]
+                    for strength, value in layer_grid.items()
+                }
+                for layer, layer_grid in record["beta_grid"].items()
             },
             "gradient_parity": record["gradient_parity"],
         })
-        for family_name in ("alpha_grid", "beta_grid"):
-            for strength, measurement in record[family_name].items():
+        for strength, measurement in record["alpha_grid"].items():
+            for position in measurement["positions"]:
+                append_jsonl(run_dir / "process_interventions.jsonl", {
+                    "timestamp": utc_now(),
+                    "phase": phase,
+                    "item_id": item_id,
+                    "grid": "alpha_grid",
+                    "grid_strength": strength,
+                    "support_before": record["clean_support"],
+                    "support_after": measurement["support_after"],
+                    **position,
+                })
+        for alternative_layer, layer_grid in record["beta_grid"].items():
+            for strength, measurement in layer_grid.items():
                 for position in measurement["positions"]:
                     append_jsonl(run_dir / "process_interventions.jsonl", {
                         "timestamp": utc_now(),
                         "phase": phase,
                         "item_id": item_id,
-                        "grid": family_name,
+                        "grid": "alternative_layer_beta_grid",
+                        "alternative_layer": int(alternative_layer),
                         "grid_strength": strength,
                         "support_before": record["clean_support"],
                         "support_after": measurement["support_after"],
@@ -998,10 +1051,14 @@ def run_discovery_phase(
     weak_alpha = float(strength_selection["alpha"]["weak_alpha"])
     strong_alpha = float(strength_selection["alpha"]["strong_alpha"])
     beta = float(strength_selection["beta"]["beta"])
+    alternative_layer = int(
+        strength_selection["beta"]["alternative_layer"]
+    )
     selected_strengths = {
         "weak_alpha": weak_alpha,
         "strong_alpha": strong_alpha,
         "beta": beta,
+        "alternative_layer": alternative_layer,
     }
     append_jsonl(run_dir / "events.jsonl", {
         "timestamp": utc_now(),
@@ -1226,6 +1283,14 @@ def run_freeze_phase(
     hashes: dict[str, str],
 ) -> dict[str, Any]:
     phase = "freeze"
+    # Check the causal prerequisite before trying to hash discovery artifacts.
+    # A failed discovery intentionally withholds candidate artifacts, so loading
+    # those files first masks the real fail-closed reason with FileNotFoundError.
+    discovery_gate = read_gate(run_dir, "discovery")
+    if not discovery_gate.passed:
+        raise RuntimeError(
+            f"prerequisite discovery is {discovery_gate.status}, not passed"
+        )
     _answers, split = _load_campaign_inputs(run_dir, hashes)
     _load_pre_discovery_smoke_hash(run_dir, hashes)
     _load_discovery_hashes(run_dir, hashes)
@@ -1258,6 +1323,7 @@ def run_freeze_phase(
         "weak_alpha": float(discovery["weak_alpha"]),
         "strong_alpha": float(discovery["strong_alpha"]),
         "beta": float(discovery["beta"]),
+        "alternative_layer": int(discovery["alternative_layer"]),
         "strength_selection": discovery["strength_selection"],
         "candidate_selection": dict(config["candidate_selection"]),
         "support_matching": dict(config["support_matching"]),
@@ -1512,11 +1578,14 @@ def render_results_markdown(
     support_summary: Mapping[str, Any],
     *,
     heldout_items: int,
+    alternative_layer: int | None = None,
 ) -> str:
     lines = [
         "# Process-sensitive replay held-out results",
         "",
         f"Held-out items: {heldout_items}",
+        "Primary intervention layer: 31",
+        f"Frozen alternative intervention layer: {alternative_layer}",
         "",
         (
             "Support-match gate: **PASSED** "
@@ -1566,7 +1635,7 @@ def render_results_markdown(
                 "h3_support_normalized_response_difference",
             ),
             ("H4 targeted − random", "h4_targeted_minus_random"),
-            ("H4 alternative − random", "h4_alternative_minus_random"),
+            ("H4 alternative − same-layer random", "h4_alternative_minus_random"),
             ("H5 targeted preserved − reset", "h5_targeted_preserved_minus_reset"),
         )
         for row_label, key in effect_rows:
@@ -1692,6 +1761,7 @@ def run_analyze_phase(
         "schema_version": 1,
         "heldout_items": len(heldout_ids),
         "support_matching": support_summary,
+        "alternative_layer": int(frozen["alternative_layer"]),
         "candidate_statistics": candidate_statistics,
         "plots": sorted(plot_hashes),
         "interpretation": {
@@ -1721,6 +1791,7 @@ def run_analyze_phase(
             candidate_statistics,
             support_summary,
             heldout_items=len(heldout_ids),
+            alternative_layer=int(frozen["alternative_layer"]),
         ),
         encoding="utf-8",
     )

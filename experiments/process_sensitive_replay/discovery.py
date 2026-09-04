@@ -24,6 +24,7 @@ DISCOVERY_CANDIDATE_CONDITIONS = (
     "targeted_strong_preserved",
     "random_strong_preserved",
     "support_matched_alternative_preserved",
+    "alternative_random_preserved",
     "targeted_strong_reset",
 )
 
@@ -37,11 +38,11 @@ class AlphaTrial:
 
 @dataclass(frozen=True)
 class BetaTrial:
+    alternative_layer: int
     beta: float
     targeted_support_drops: tuple[float, ...]
     alternative_support_drops: tuple[float, ...]
     median_norm_ratio: float
-    max_abs_cosine: float
     finite: bool = True
 
 
@@ -108,7 +109,6 @@ def evaluate_beta_trial(trial: BetaTrial, config: Mapping[str, Any]) -> dict[str
         and _finite(trial.targeted_support_drops)
         and _finite(trial.alternative_support_drops)
         and math.isfinite(trial.median_norm_ratio)
-        and math.isfinite(trial.max_abs_cosine)
     )
     if not finite:
         return {"passed": False, "reason": "non_finite"}
@@ -136,23 +136,21 @@ def evaluate_beta_trial(trial: BetaTrial, config: Mapping[str, Any]) -> dict[str
     )
     mismatch_match = mismatch_median <= tolerance
     norm_ok = trial.median_norm_ratio <= float(alternative["max_median_norm_ratio_to_targeted"])
-    cosine_ok = trial.max_abs_cosine <= float(alternative["max_abs_cosine_with_answer_gradient"])
-    passed = alternative_positive and median_drop_match and mismatch_match and norm_ok and cosine_ok
+    passed = alternative_positive and median_drop_match and mismatch_match and norm_ok
     return {
         "passed": passed,
+        "alternative_layer": int(trial.alternative_layer),
         "targeted_median_support_drop": target_median,
         "alternative_median_support_drop": alternative_median,
         "median_absolute_support_mismatch": mismatch_median,
         "support_mismatch_tolerance": tolerance,
         "median_norm_ratio": trial.median_norm_ratio,
-        "max_abs_cosine": trial.max_abs_cosine,
         "checks": {
             "targeted_positive": target_positive,
             "alternative_positive": alternative_positive,
             "median_drop_match": median_drop_match,
             "median_mismatch_match": mismatch_match,
             "norm_ratio": norm_ok,
-            "cosine": cosine_ok,
         },
     }
 
@@ -160,10 +158,14 @@ def evaluate_beta_trial(trial: BetaTrial, config: Mapping[str, Any]) -> dict[str
 def select_beta_strength(
     trials: Sequence[BetaTrial], config: Mapping[str, Any]
 ) -> dict[str, Any]:
-    ordered = sorted(trials, key=lambda trial: trial.beta)
-    declared = [float(value) for value in config["strengths"]["beta_grid"]]
-    if [float(trial.beta) for trial in ordered] != declared:
-        raise ValueError("beta trials do not exactly cover the frozen grid")
+    ordered = sorted(trials, key=lambda trial: (trial.alternative_layer, trial.beta))
+    declared = [
+        (int(layer), float(beta))
+        for layer in config["layers"]["alternative_candidates"]
+        for beta in config["strengths"]["beta_grid"]
+    ]
+    if [(trial.alternative_layer, float(trial.beta)) for trial in ordered] != declared:
+        raise ValueError("alternative-layer/beta trials do not exactly cover the frozen grid")
     evaluated = [(trial, evaluate_beta_trial(trial, config)) for trial in ordered]
     eligible = [(trial, result) for trial, result in evaluated if result["passed"]]
     if not eligible:
@@ -172,14 +174,17 @@ def select_beta_strength(
         eligible,
         key=lambda pair: (
             pair[1]["median_absolute_support_mismatch"],
+            pair[0].alternative_layer,
             pair[0].beta,
         ),
     )
     return {
         "beta": chosen.beta,
+        "alternative_layer": int(chosen.alternative_layer),
         "diagnostics": diagnostics,
         "grid_diagnostics": {
-            str(trial.beta): result for trial, result in evaluated
+            f"layer_{trial.alternative_layer}/beta_{trial.beta:g}": result
+            for trial, result in evaluated
         },
     }
 
@@ -201,16 +206,21 @@ def _schedule(
     item_id: str,
     family: str,
     strength: float,
+    process_layer: int,
 ) -> InterventionSchedule:
+    if int(bundle.process_layer) != int(process_layer):
+        raise AssertionError("gradient bundle layer does not match intervention layer")
     return InterventionSchedule(
-        process_layer=int(config["layers"]["process"]),
+        process_layer=int(process_layer),
         positions=build_interventions(
             bundle,
             family=family,
             strength=float(strength),
             campaign_seed=int(config["split"]["seed"]),
             item_id=str(item_id),
-            max_abs_cosine=float(config["alternative"]["max_abs_cosine_with_answer_gradient"]),
+            max_abs_cosine=float(
+                config["alternative"]["random_max_abs_cosine_with_answer_gradient"]
+            ),
         ),
     )
 
@@ -218,17 +228,13 @@ def _schedule(
 def _position_measurements(schedule: InterventionSchedule) -> list[dict[str, Any]]:
     return [
         {
+            "process_layer": int(schedule.process_layer),
             "position": int(spec.position),
             "token_id": int(spec.token_id),
             "family": str(spec.family),
             "strength": float(spec.strength),
             "residual_norm": float(spec.residual_norm),
             "answer_gradient_norm": float(spec.answer_gradient_norm),
-            "alternative_gradient_norm": (
-                None
-                if spec.alternative_gradient_norm is None
-                else float(spec.alternative_gradient_norm)
-            ),
             "perturbation_norm": float(torch.linalg.vector_norm(spec.delta.float()).item()),
             "direction_cosine": float(spec.direction_cosine),
             "rng_seed": spec.rng_seed,
@@ -254,12 +260,13 @@ def measure_strength_grid_item(
         raise ValueError("discovery grid families must be alpha and/or beta")
     atol = float(config["reset_parity"]["absolute_tolerance"])
     rtol = float(config["reset_parity"]["relative_tolerance"])
+    primary_layer = int(config["layers"]["process"])
     bundle = compute_clean_gradients(
         adapter,
         answer["post_answer_token_ids"],
         prefix_length=len(answer["question_prefix_token_ids"]),
         answer_token_ids=answer["answer_token_ids"],
-        process_layer=int(config["layers"]["process"]),
+        process_layer=primary_layer,
         atol=atol,
         rtol=rtol,
     )
@@ -274,51 +281,10 @@ def measure_strength_grid_item(
     if clean.process_hook_positions:
         raise AssertionError("discovery clean replay unexpectedly activated the process hook")
 
-    alpha_grid: dict[str, Any] = {}
-    beta_grid: dict[str, Any] = {}
-    outcomes = [clean]
-    if "alpha" in family_set:
-        for alpha_value in config["strengths"]["alpha_grid"]:
-            alpha = float(alpha_value)
-            schedule = _schedule(
-                bundle, config, item_id=item_id, family="targeted", strength=alpha
-            )
-            outcome = _replay(adapter, answer, schedule)
-            assert_process_propagated(
-                clean.cache_audit,
-                outcome.cache_audit,
-                process_layer=int(config["layers"]["process"]),
-            )
-            outcomes.append(outcome)
-            alpha_grid[str(alpha)] = {
-                "support_after": float(outcome.answer_sequence_logp),
-                "support_drop": float(clean.answer_sequence_logp - outcome.answer_sequence_logp),
-                "cache_digest": outcome.cache_audit.digest,
-                "positions": _position_measurements(schedule),
-            }
-    if "beta" in family_set:
-        for beta_value in config["strengths"]["beta_grid"]:
-            beta = float(beta_value)
-            schedule = _schedule(
-                bundle, config, item_id=item_id, family="alternative", strength=beta
-            )
-            outcome = _replay(adapter, answer, schedule)
-            assert_process_propagated(
-                clean.cache_audit,
-                outcome.cache_audit,
-                process_layer=int(config["layers"]["process"]),
-            )
-            outcomes.append(outcome)
-            beta_grid[str(beta)] = {
-                "support_after": float(outcome.answer_sequence_logp),
-                "support_drop": float(clean.answer_sequence_logp - outcome.answer_sequence_logp),
-                "cache_digest": outcome.cache_audit.digest,
-                "positions": _position_measurements(schedule),
-            }
-
     expected_length = len(answer["post_answer_token_ids"])
     layer_types = list(adapter.text_config.layer_types)
-    for outcome in outcomes:
+
+    def validate_grid_outcome(outcome: Any) -> None:
         assert_hybrid_cache_integrity(
             outcome.cache,
             layer_types=layer_types,
@@ -333,6 +299,81 @@ def measure_strength_grid_item(
         if not math.isfinite(outcome.answer_sequence_logp):
             raise AssertionError("discovery strength grid produced non-finite support")
 
+    validate_grid_outcome(clean)
+
+    alpha_grid: dict[str, Any] = {}
+    beta_grid: dict[str, dict[str, Any]] = {}
+    alternative_gradient_parity: dict[str, Any] = {}
+    if "alpha" in family_set:
+        for alpha_value in config["strengths"]["alpha_grid"]:
+            alpha = float(alpha_value)
+            schedule = _schedule(
+                bundle, config, item_id=item_id, family="targeted", strength=alpha,
+                process_layer=primary_layer,
+            )
+            outcome = _replay(adapter, answer, schedule)
+            assert_process_propagated(
+                clean.cache_audit,
+                outcome.cache_audit,
+                process_layer=primary_layer,
+            )
+            validate_grid_outcome(outcome)
+            alpha_grid[str(alpha)] = {
+                "support_after": float(outcome.answer_sequence_logp),
+                "support_drop": float(clean.answer_sequence_logp - outcome.answer_sequence_logp),
+                "cache_digest": outcome.cache_audit.digest,
+                "positions": _position_measurements(schedule),
+            }
+    if "beta" in family_set:
+        for alternative_layer_value in config["layers"]["alternative_candidates"]:
+            alternative_layer = int(alternative_layer_value)
+            alternative_bundle = compute_clean_gradients(
+                adapter,
+                answer["post_answer_token_ids"],
+                prefix_length=len(answer["question_prefix_token_ids"]),
+                answer_token_ids=answer["answer_token_ids"],
+                process_layer=alternative_layer,
+                atol=atol,
+                rtol=rtol,
+            )
+            if not math.isclose(
+                clean.answer_sequence_logp,
+                alternative_bundle.answer_sequence_logp,
+                abs_tol=atol,
+                rel_tol=rtol,
+            ):
+                raise AssertionError(
+                    "alternative-layer recurrent/cached support parity failed"
+                )
+            beta_grid[str(alternative_layer)] = {}
+            alternative_gradient_parity[str(alternative_layer)] = alternative_bundle.parity
+            for beta_value in config["strengths"]["beta_grid"]:
+                beta = float(beta_value)
+                schedule = _schedule(
+                    alternative_bundle,
+                    config,
+                    item_id=item_id,
+                    family="alternative_targeted",
+                    strength=beta,
+                    process_layer=alternative_layer,
+                )
+                outcome = _replay(adapter, answer, schedule)
+                assert_process_propagated(
+                    clean.cache_audit,
+                    outcome.cache_audit,
+                    process_layer=alternative_layer,
+                )
+                validate_grid_outcome(outcome)
+                beta_grid[str(alternative_layer)][str(beta)] = {
+                    "alternative_layer": alternative_layer,
+                    "support_after": float(outcome.answer_sequence_logp),
+                    "support_drop": float(
+                        clean.answer_sequence_logp - outcome.answer_sequence_logp
+                    ),
+                    "cache_digest": outcome.cache_audit.digest,
+                    "positions": _position_measurements(schedule),
+                }
+
     return {
         "item_id": item_id,
         "clean_support": float(clean.answer_sequence_logp),
@@ -341,6 +382,7 @@ def measure_strength_grid_item(
         "question_token_hash": clean.question_token_hash,
         "answer_token_hash": clean.answer_token_hash,
         "gradient_parity": bundle.parity,
+        "alternative_gradient_parity": alternative_gradient_parity,
         "alpha_grid": alpha_grid,
         "beta_grid": beta_grid,
     }
@@ -414,40 +456,54 @@ def _beta_trials(
         for record in records
     )
     beta_trials: list[BetaTrial] = []
-    for beta_value in config["strengths"]["beta_grid"]:
-        beta = float(beta_value)
-        alternative_drops = tuple(
-            float(record["beta_grid"][str(beta)]["support_drop"])
-            for record in records
-        )
-        norm_ratios: list[float] = []
-        cosines: list[float] = []
-        for record in records:
-            targeted_positions = {
-                int(row["position"]): row
-                for row in record["alpha_grid"][str(strong_alpha)]["positions"]
-            }
-            alternative_positions = {
-                int(row["position"]): row
-                for row in record["beta_grid"][str(beta)]["positions"]
-            }
-            if set(targeted_positions) != set(alternative_positions):
-                raise AssertionError("discovery targeted/alternative positions are unpaired")
-            for position in sorted(targeted_positions):
-                target_norm = float(targeted_positions[position]["perturbation_norm"])
-                alternative_norm = float(alternative_positions[position]["perturbation_norm"])
-                if target_norm <= 0:
-                    raise AssertionError("discovery targeted perturbation norm is non-positive")
-                norm_ratios.append(alternative_norm / target_norm)
-                cosines.append(abs(float(alternative_positions[position]["direction_cosine"])))
-        beta_trials.append(BetaTrial(
-            beta=beta,
-            targeted_support_drops=targeted_drops,
-            alternative_support_drops=alternative_drops,
-            median_norm_ratio=median(norm_ratios),
-            max_abs_cosine=max(cosines),
-            finite=_finite((*targeted_drops, *alternative_drops, *norm_ratios, *cosines)),
-        ))
+    for alternative_layer_value in config["layers"]["alternative_candidates"]:
+        alternative_layer = int(alternative_layer_value)
+        for beta_value in config["strengths"]["beta_grid"]:
+            beta = float(beta_value)
+            alternative_drops = tuple(
+                float(
+                    record["beta_grid"][str(alternative_layer)][str(beta)][
+                        "support_drop"
+                    ]
+                )
+                for record in records
+            )
+            norm_ratios: list[float] = []
+            for record in records:
+                targeted_positions = {
+                    int(row["position"]): row
+                    for row in record["alpha_grid"][str(strong_alpha)]["positions"]
+                }
+                alternative_positions = {
+                    int(row["position"]): row
+                    for row in record["beta_grid"][str(alternative_layer)][str(beta)][
+                        "positions"
+                    ]
+                }
+                if set(targeted_positions) != set(alternative_positions):
+                    raise AssertionError(
+                        "discovery targeted/alternative positions are unpaired"
+                    )
+                for position in sorted(targeted_positions):
+                    target_norm = float(
+                        targeted_positions[position]["perturbation_norm"]
+                    )
+                    alternative_norm = float(
+                        alternative_positions[position]["perturbation_norm"]
+                    )
+                    if target_norm <= 0:
+                        raise AssertionError(
+                            "discovery targeted perturbation norm is non-positive"
+                        )
+                    norm_ratios.append(alternative_norm / target_norm)
+            beta_trials.append(BetaTrial(
+                alternative_layer=alternative_layer,
+                beta=beta,
+                targeted_support_drops=targeted_drops,
+                alternative_support_drops=alternative_drops,
+                median_norm_ratio=median(norm_ratios),
+                finite=_finite((*targeted_drops, *alternative_drops, *norm_ratios)),
+            ))
     return beta_trials
 
 
@@ -461,8 +517,12 @@ def beta_grid_diagnostics(
     return {
         "item_count": len(records),
         "frozen_strong_alpha": float(strong_alpha),
+        "alternative_layer_candidates": [
+            int(value) for value in config["layers"]["alternative_candidates"]
+        ],
         "grid": {
-            str(trial.beta): evaluate_beta_trial(trial, config)
+            f"layer_{trial.alternative_layer}/beta_{trial.beta:g}":
+                evaluate_beta_trial(trial, config)
             for trial in trials
         },
     }
@@ -531,6 +591,7 @@ def rank_candidate_grid(
     strong_index = index["targeted_strong_preserved"]
     random_index = index["random_strong_preserved"]
     alternative_index = index["support_matched_alternative_preserved"]
+    alternative_random_index = index["alternative_random_preserved"]
     reset_index = index["targeted_strong_reset"]
 
     metric_names = tuple(config["candidate_selection"]["rank_metrics"])
@@ -561,6 +622,7 @@ def rank_candidate_grid(
         targeted = layer_scores[:, strong_index, :]
         alternative = layer_scores[:, alternative_index, :]
         random = layer_scores[:, random_index, :]
+        alternative_random = layer_scores[:, alternative_random_index, :]
         reset = layer_scores[:, reset_index, :]
         relation_y = layer_scores[:, relation_indices, :]
         centered_y = relation_y - relation_y.mean(dim=1, keepdim=True)
@@ -573,14 +635,21 @@ def rank_candidate_grid(
         oriented_target = orientation * target_effects.mean(dim=0)
         oriented_alternative = orientation * alternative_effects.mean(dim=0)
         targeted_minus_random = orientation * (targeted - random).mean(dim=0)
+        alternative_minus_random = orientation * (
+            alternative - alternative_random
+        ).mean(dim=0)
         targeted_minus_reset = orientation * (targeted - reset).mean(dim=0)
         structured_consistency = 0.5 * (
             (orientation[None, :] * target_effects > 0).float().mean(dim=0)
             + (orientation[None, :] * alternative_effects > 0).float().mean(dim=0)
         )
-        random_consistency = (
-            orientation[None, :] * random_effects > 0
-        ).float().mean(dim=0)
+        alternative_random_effects = alternative_random - clean
+        random_consistency = 0.5 * (
+            (orientation[None, :] * random_effects > 0).float().mean(dim=0)
+            + (
+                orientation[None, :] * alternative_random_effects > 0
+            ).float().mean(dim=0)
+        )
 
         pooled_effects = torch.stack((target_effects, alternative_effects), dim=1)
         pooled_slope = (
@@ -600,6 +669,7 @@ def rank_candidate_grid(
             "targeted_strong_effect": oriented_target,
             "support_matched_alternative_effect": oriented_alternative,
             "targeted_minus_random": targeted_minus_random,
+            "alternative_minus_random": alternative_minus_random,
             "targeted_preserved_minus_reset": targeted_minus_reset,
             "support_adjusted_agreement": -agreement_mismatch,
             "item_sign_consistency": structured_consistency,
@@ -620,6 +690,10 @@ def rank_candidate_grid(
             & (targeted_minus_reset > 0)
             & (
                 (targeted_minus_random > 0)
+                | (structured_consistency > random_consistency)
+            )
+            & (
+                (alternative_minus_random > 0)
                 | (structured_consistency > random_consistency)
             )
             & (

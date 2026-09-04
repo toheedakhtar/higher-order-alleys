@@ -167,7 +167,8 @@ The gradient hook is registered only for the declared answer-predicting position
 - full-vocabulary per-token logit parity at every intended position;
 - total answer-sequence support parity;
 - layer-31 residual-state parity at every intended position;
-- finite, nonzero answer-support and entropy gradients at every intended position;
+- finite, nonzero answer-support gradients at every intended position for the
+  primary layer and each predeclared alternative layer;
 - an exact hook-position list with no activity outside the declared factual-answer positions.
 
 Every comparison and maximum absolute/relative difference is logged. Any failure halts the phase fail-closed. The earlier full-sequence no-cache gradient route is prohibited because Qwen3.6 selects a chunked delta-rule kernel there while experimental replay uses its recurrent kernel.
@@ -200,20 +201,29 @@ Because the hook is on the output of layer 31:
 - at least one downstream layer 32–63 state must change;
 - the runner will fail if only the transient activation changes but no downstream persistent state differs.
 
+The identical relative invariant applies to the frozen alternative layer:
+layers through that intervention layer remain clean and at least one later
+persistent layer must change.
+
 Independent branches will use deep tensor clones. Object identity and tensor storage pointers will be checked so correctness scoring, confidence scoring, and generation cannot mutate one another’s state.
 
 ## Conditions
 
-The six primary conditions will be:
+The seven primary conditions for `psr-v8` will be:
 
 1. `clean_preserved`
 2. `targeted_weak_preserved`
 3. `targeted_strong_preserved`
 4. `random_strong_preserved`
 5. `support_matched_alternative_preserved`
-6. `targeted_strong_reset`
+6. `alternative_random_preserved`
+7. `targeted_strong_reset`
 
-`random_strong_preserved` will use the exact per-position norm of the strong targeted intervention.
+`random_strong_preserved` will use the exact per-position norm of the strong
+targeted intervention at layer 31. `alternative_random_preserved` will use the
+exact per-position norm of the alternative targeted intervention at its frozen
+earlier layer. Both random controls are deterministic Gaussian directions
+projected orthogonally to the answer-support gradient at their own layer.
 
 For each position:
 
@@ -227,38 +237,39 @@ Seeds will be derived deterministically from the campaign seed, item ID, and glo
 
 `clean_reset` will be mandatory in smoke and periodic held-out integrity items. Reset reconstruction will use the same incremental replay engine with interventions disabled, avoiding a chunked-prefill versus recurrent-decoding numerical confound.
 
-## Support-matched alternative perturbation
+## Support-matched alternative perturbation (`psr-v8`)
 
-The norm-matched random condition controls for generic perturbation energy, but it does not control for the functional size of the disruption. A second perturbation family will therefore be calibrated to reproduce the answer-support drop of `targeted_strong_preserved` through a different residual-space direction.
+`psr-v7` established that the same-layer entropy/orthogonal perturbation could
+match the aggregate support drop but not the frozen paired-item mismatch gate.
+It remains a valid failed-gate diagnostic campaign. `psr-v8` replaces only
+that failed alternative with a different-layer, same-objective intervention.
 
-The recommended alternative objective is predictive-distribution entropy rather than direct answer suppression. On the clean gradient replay, compute:
+The primary intervention remains at zero-based layer 31. The alternative layer
+is selected from the predeclared set `{15, 19, 23}`. The pinned Qwen
+architecture identifies all four as full-attention blocks; the alternatives
+are respectively 16, 12, and 8 blocks before layer 31 and all are well below
+meta readout layer 40. Layer 27 is excluded because its four-block separation
+is not substantial enough for this comparison.
+
+At each candidate alternative layer, compute the identical clean objective:
 
 ```text
-A = Σₜ H[P(next token | Q, X<t)]
-aᵢ = ∂A / ∂hᵢ
+S = sum_t log P(X_t | Q, X_<t)
+g_alt_i = dS / dh_alt_i
+delta_alt_i = -beta * ||h_alt_i_clean|| * normalize(g_alt_i)
 ```
 
-At each answer-predicting position, remove the component parallel to the answer-support gradient:
+The alternative uses the same answer-predicting positions, factual question,
+exact teacher-forced answer IDs, recurrent replay path, preserved hybrid-state
+path, and Turn-3 suffixes. Discovery freezes one alternative layer and one
+global beta; per-item strength fitting is forbidden.
 
-```text
-ĝᵢ = normalize(gᵢ)
-aᵢ⊥ = aᵢ - (aᵢ · ĝᵢ) ĝᵢ
-uᵢ = normalize(aᵢ⊥)
-alternative deltaᵢ = beta × ||hᵢ_clean|| × uᵢ
-```
-
-This makes the alternative intervention an entropy-increasing/uncertainty-inducing manipulation rather than another direct step down `-g`. The absolute cosine between `uᵢ` and `gᵢ` must be at most the configured orthogonality tolerance, proposed as `0.10`. If the projected entropy gradient is non-finite or too small, use a deterministic seeded Gaussian direction projected orthogonally to `gᵢ`, and record the fallback explicitly.
-
-The alternative condition will use:
-
-- the same process layer;
-- the same answer-predicting positions;
-- the same clean residual-norm reference;
-- the exact same teacher-forced answer tokens;
-- the same state-preservation path into Turn 3;
-- a single global `beta`, never a per-item fitted magnitude.
-
-Because an approximately orthogonal direction has little first-order effect on answer support, it may require a larger perturbation norm than the targeted gradient. The alternative norm will therefore be logged separately and bounded. If support matching requires non-finite states or a median total perturbation norm more than four times the targeted condition, the support-matched-control gate fails rather than accepting a broadly destructive intervention.
+Alternative-layer selection may use only support-match quality, finite
+state/cache integrity, and the existing four-times median perturbation-norm
+ceiling. It may not use J-space/candidate activity, confidence, correctness,
+or held-out data. `alternative_random_preserved` is generated at the selected
+alternative layer, is orthogonal to that layer's answer-support gradient, and
+exactly matches the alternative targeted norm at every position.
 
 ## Dataset split
 
@@ -284,12 +295,9 @@ Only the 16 discovery items will test:
 alpha = 0.01, 0.02, 0.05, 0.10, 0.11, 0.125, 0.15, 0.20
 ```
 
-This is the declared `psr-v7` grid. The `psr-v6` discovery diagnostic placed
-the weak point at `0.10`, found no point in the strong target range, and
-overshot it at `0.20`; the added intermediate points resolve the grid's
-measurement gap. All weak/strong thresholds, fallback behavior, and
-fail-closed rules remain unchanged. `psr-v6` remains a failed diagnostic and
-none of its measurements are imported into `psr-v7`.
+This alpha grid remains unchanged from `psr-v7`. That campaign selected weak
+alpha `0.10` and strong alpha `0.11`, then failed the support-matched
+alternative gate. No `psr-v7` measurements are imported into `psr-v8`.
 
 Proposed deterministic selection rule:
 
@@ -300,10 +308,12 @@ Proposed deterministic selection rule:
 
 This prevents silent per-item or held-out tuning.
 
-After freezing `STRONG`, discovery will calibrate the alternative perturbation on a separate declared `beta` grid, initially:
+After freezing `STRONG`, discovery evaluates every predeclared alternative
+layer against the following predeclared global-beta grid:
 
 ```text
-beta = 0.05, 0.10, 0.20, 0.40, 0.80
+alternative_layer = 15, 19, 23
+beta = 0.05, 0.08, 0.10, 0.11, 0.125, 0.15, 0.20, 0.30, 0.40
 ```
 
 For each beta, define the paired support mismatch:
@@ -313,16 +323,22 @@ support_mismatchᵢ =
     support_drop_alternativeᵢ - support_drop_targeted_strongᵢ
 ```
 
-Select the single global beta that minimizes median absolute support mismatch, subject to:
+Select the single `(alternative_layer, global_beta)` pair that minimizes
+median absolute support mismatch, subject to:
 
 - finite activations, logits, and cache/recurrent states;
 - positive median alternative support drop;
 - median alternative support drop within 25% of the targeted-strong median;
 - median absolute paired mismatch no greater than `max(0.5 nat, 25% of the targeted-strong discovery median)`;
 - the four-times perturbation-norm ceiling;
-- the configured gradient-direction cosine threshold.
 
-The chosen beta, tolerance, direction construction, fallback rule, and support-matching diagnostics are frozen in `frozen_protocol.json`. If no beta passes, discovery ends with `support_match_gate_failed`. The grid cannot be expanded inside the same campaign.
+Exact ties are resolved by ascending alternative layer and then ascending
+beta. No candidate/J-space or meta-output quantity participates.
+
+The chosen alternative layer, beta, same-objective construction, and complete
+support-matching diagnostics are frozen in `frozen_protocol.json`. If no
+layer/beta pair passes, discovery ends with `support_match_gate_failed`. The
+layer or strength grid cannot be expanded inside the same campaign.
 
 Each discovery alpha row and the aggregate per-alpha median, positive-item
 count, finiteness, weak eligibility, and strong eligibility are flushed and
@@ -380,7 +396,8 @@ For every token/layer on discovery, calculate:
 - item-centered relationship with support drop across clean, weak, and strong;
 - targeted-strong minus clean effect;
 - support-matched-alternative minus clean effect;
-- targeted-strong minus random effect;
+- targeted-strong minus its layer-31 random effect;
+- alternative-targeted minus its own earlier-layer random effect;
 - targeted-preserved minus reset effect;
 - agreement between targeted-strong and support-matched-alternative after accounting for their realized support drops;
 - item-level sign consistency.
@@ -389,8 +406,8 @@ The executable definition is frozen as follows. For each item, scores and
 support drops for clean, targeted-weak, and targeted-strong are centered within
 item. Their pooled through-origin slope defines the item-centered support
 relationship; its sign orients that token/layer candidate. Targeted,
-alternative, targeted-minus-random, and targeted-preserved-minus-reset effects
-are then multiplied by this orientation.
+alternative, both same-layer structured-minus-random effects, and
+targeted-preserved-minus-reset effects are then multiplied by this orientation.
 
 Support-adjusted agreement is computed by fitting one pooled through-origin
 slope from realized targeted/alternative support drops to their respective
@@ -401,19 +418,17 @@ and alternative effects.
 
 An eligible candidate must have score variance greater than `1e-8`, a nonzero
 support slope, positive oriented targeted and alternative mean effects, a
-positive oriented targeted-preserved-minus-reset effect, and either a positive
-oriented targeted-minus-random effect or greater structured than random
-item-sign consistency. Its support-adjusted divergence ratio must be no greater
-than `1.0`. These comparisons operationalize the already-frozen requirements
-that the two structured interventions move together, random be smaller or less
-structured, reset approach clean, and strongly mechanism-specific divergence
-be excluded.
+positive oriented targeted-preserved-minus-reset effect, and for each
+mechanism either a positive oriented structured-minus-own-random effect or
+greater structured than pooled-random item-sign consistency. Its
+support-adjusted divergence ratio must be no greater than `1.0`.
 
-Eligible candidates receive deterministic descending ordinal ranks for seven
+Eligible candidates receive deterministic descending ordinal ranks for eight
 metrics: absolute item-centered support slope, oriented targeted effect,
-oriented alternative effect, oriented targeted-minus-random,
+oriented alternative effect, oriented targeted-minus-primary-random,
+oriented alternative-minus-alternative-random,
 oriented targeted-preserved-minus-reset, support-adjusted agreement, and
-structured item-sign consistency. The unweighted mean of those seven ranks is
+structured item-sign consistency. The unweighted mean of those eight ranks is
 the aggregate rank; exact ties retain ascending flattened layer/token order.
 Ranked candidates are greedily deduplicated using an absolute effective
 direction cosine ceiling of `0.9`, where the saved effective direction is
@@ -436,7 +451,8 @@ For each frozen candidate, the 66-item analysis will test:
 - H1: oriented targeted-strong minus clean effect.
 - H2: oriented support-matched-alternative minus clean effect in the same direction as H1.
 - H3: targeted-strong and support-matched-alternative produce similar candidate responses after accounting for their realized support drops.
-- H4: targeted-strong minus random and support-matched-alternative minus random effects.
+- H4: targeted-strong minus its layer-31 random and support-matched-alternative
+  minus its frozen earlier-layer random effects.
 - H5: oriented targeted-preserved minus reset effect.
 - H6: item-centered candidate-score slope against support drop.
 - H7: item-centered confidence-margin slope against support drop.
@@ -491,22 +507,41 @@ The denominator and counts of matched and unmatched valid held-out items will be
 
 Evidence for convergence requires a nonzero support relationship in the discovery-frozen direction and a small mechanism-specific term relative to the shared targeted/alternative effect. Bootstrap intervals will resample whole items, keeping both mechanisms together. Raw differences will always be shown alongside normalized effects so division by small support drops cannot hide instability.
 
-A candidate will only be called process-sensitive if H1–H6 replicate in the predeclared direction, the support-matched alternative converges with the targeted response, reset approaches clean, and both structured effects are distinguishable from the norm-matched random control. H7 provides the stronger metacognitive-monitoring result.
+The descriptive pattern relevant to a future explicitly frozen classification
+rule is: H1–H6 replicate in the predeclared direction, the support-matched
+alternative converges with the targeted response, reset approaches clean, and
+both structured effects are distinguishable from their own same-layer random
+controls. This experiment does not automatically apply the label
+process-sensitive or `M(P)`-like because no numerical convergence decision
+threshold has been approved. H7 provides the stronger metacognitive-monitoring
+result.
 
 ## Required plots
 
-1. **Manipulation check:** support drop for clean, targeted weak, targeted strong, support-matched alternative, and norm-matched random.
+1. **Manipulation check:** support drop for clean, primary targeted, primary
+   random, alternative targeted, and alternative random.
 2. **Confidence versus first-order support:** item-level confidence margin against support drop, grouped by condition.
-3. **Candidate score versus support drop:** held-out candidate scores and item-centered trend.
-4. **Targeted versus random:** paired candidate-score effects relative to clean.
+3. **Candidate score versus support drop:** held-out candidate scores grouped
+   by mechanism and intervention layer.
+4. **Mechanism comparisons:** primary targeted versus alternative targeted;
+   primary targeted versus primary random; and alternative targeted versus
+   alternative random.
 5. **Preserved versus reset:** targeted-strong preserved versus identical-transcript reset for candidate score and confidence margin.
 6. **Clean versus perturbed with identical text:** paired clean and targeted-strong candidate scores.
 7. **Generic evaluator controls:** tokens `97817` and `99973` across all process conditions.
-8. **Layer profile:** frozen candidate scores across layers 36–44 for clean, targeted, support-matched alternative, random, and reset.
-9. **Held-out effect summary:** targeted-clean, alternative-clean, targeted-random, targeted-reset, and targeted-alternative effects with item-bootstrap intervals.
-10. **Five-condition candidate comparison:** candidate score for `CLEAN`, `TARGETED_STRONG`, `SUPPORT_MATCHED_ALTERNATIVE`, `RANDOM_NORM_MATCHED`, and `RESET`, showing individual held-out items and paired means.
+8. **Layer profile:** frozen candidate scores across layers 36–44 for clean,
+   both targeted mechanisms, both own-layer random controls, and reset.
+9. **Held-out effect summary:** targeted-clean, alternative-clean, both
+   structured-minus-own-random contrasts, targeted-reset, and
+   targeted-alternative effects with item-bootstrap intervals.
+10. **Mechanism/control candidate comparison:** candidate score for `CLEAN`,
+    primary targeted/random, alternative targeted/random, and `RESET`, showing
+    individual held-out items and paired means.
 11. **Mechanism convergence relative to support drop:** targeted versus alternative support-normalized candidate response, with the identity line and item-paired connections.
 12. **Held-out item-level support matching:** paired targeted and alternative support drops for every held-out item, with the frozen item-specific tolerance band and each item marked as matched or unmatched. The panel annotation will show matched count, valid-item denominator, match fraction, and mean/median mismatch summaries.
+13. **Support versus mechanism residual:** the item-fixed-effect shared-support
+    component at the mean realized shared support drop beside the residual
+    alternative-layer mechanism coefficient, both in candidate-score units.
 
 Plots 10–12 are critical for the new control. Plot 10 shows whether both functionally matched perturbations converge in candidate space; Plot 11 tests whether apparent convergence remains after accounting for realized support reduction; Plot 12 prevents good aggregate matching from hiding poor item-level matching. The held-out summary table will include the per-item targeted drop, alternative drop, signed mismatch, absolute mismatch, item-specific tolerance, and match indicator, followed by the aggregate mean, median, matched count, denominator, and match fraction.
 
@@ -597,11 +632,12 @@ CPU tests will cover:
 - invalidation and split exclusion when no valid termination occurs by the 256-token cap;
 - `enable_thinking=False` rendering with a closed empty thinking block on one example from each item family;
 - targeted intervention sign using finite differences;
-- exact targeted/random norm matching;
-- random-gradient orthogonality;
-- alternative/answer-gradient orthogonality;
-- entropy-gradient projection and deterministic fallback;
-- deterministic global beta selection;
+- exact primary-targeted/primary-random and
+  alternative-targeted/alternative-random norm matching;
+- same-layer random-gradient orthogonality;
+- identical answer-support objective and negative-gradient sign at primary and
+  alternative layers;
+- deterministic global alternative-layer/beta selection;
 - rejection of per-item alternative-strength tuning;
 - support-match tolerance and perturbation-norm gates;
 - held-out item-level support-match indicator, count, denominator, and fraction calculations;
@@ -622,12 +658,16 @@ CPU tests will cover:
 The pre-discovery engineering smoke must prove all applicable infrastructure properties below without requiring a frozen beta. After discovery freezes the protocol, the post-freeze critical smoke must re-run the complete list and additionally prove frozen-beta support matching:
 
 - recurrent gradient replay has per-token full-logit, total-support, and intervention-layer residual parity with ordinary cached replay at the frozen tolerance;
-- answer-support and entropy gradients are finite and nonzero at every intended position;
+- answer-support gradients at the primary and every tested alternative layer
+  are finite and nonzero at every intended position;
 - gradient and intervention hooks fire exactly at the declared factual-answer positions and nowhere else;
 - targeted support is reduced;
-- the alternative direction satisfies the frozen cosine threshold;
+- the alternative targeted direction is the normalized negative
+  answer-support gradient at its own layer, while its same-layer random control
+  satisfies the frozen orthogonality threshold;
 - in post-freeze smoke, the alternative support drop approximately matches targeted strong on smoke items using the discovery-frozen beta;
-- targeted and alternative caches are distinct from clean and from each other;
+- primary-targeted, alternative-targeted, and both random-control caches are
+  distinct from clean and are storage-disjoint;
 - the alternative perturbation remains disabled during Turn 3;
 - targeted downstream state differs;
 - reset removes the difference;
@@ -637,7 +677,20 @@ The pre-discovery engineering smoke must prove all applicable infrastructure pro
   passes exact boundary/final transcript hash parity across conditions;
 - no factual-process hook fires during either meta branch.
 
-The smoke reports must show per-position targeted, random, and alternative norms; targeted/alternative gradient cosine; support mismatch when a frozen beta exists; reset-parity measurements; hybrid-state digests; and factual-prefix, Turn-3 suffix, prefix-suffix boundary, and final concatenated-transcript hashes. A failed post-freeze support-match gate must first write its phase-local full trial log, aggregate report, and item-level matching measurements, then halt without a success marker. A support-match failure in post-freeze smoke, or a reset-parity, orthogonality, state-preservation, suffix-integrity, branch-isolation, or hook-lifetime failure in either smoke phase, is critical and stops the run. The runner must return a nonzero exit status and must not write a phase-success marker. Discovery may start only after pre-discovery engineering smoke passes. Held-out may start only after post-freeze critical smoke passes fail-closed.
+The smoke reports must show the selected/tested intervention layers,
+per-position norms for both targeted mechanisms and their own random controls,
+same-layer random-gradient cosine, support mismatch when a frozen beta exists,
+reset-parity measurements, hybrid-state digests, and factual-prefix, Turn-3
+suffix, prefix-suffix boundary, and final concatenated-transcript hashes. A
+failed post-freeze support-match gate must first write its phase-local full
+trial log, aggregate report, and item-level matching measurements, then halt
+without a success marker. A support-match failure in post-freeze smoke, or a
+reset-parity, orthogonality, state-preservation, suffix-integrity,
+branch-isolation, or hook-lifetime failure in either smoke phase, is critical
+and stops the run. The runner must return a nonzero exit status and must not
+write a phase-success marker. Discovery may start only after pre-discovery
+engineering smoke passes. Held-out may start only after post-freeze critical
+smoke passes fail-closed.
 
 ## Results interpretation
 
@@ -649,10 +702,17 @@ held-out convergence decision threshold, it will not automatically classify a
 candidate as process-sensitive or `M(P)`-like. Such classification requires an
 explicitly approved and frozen decision rule; none is introduced here.
 
-1. **No later effect beyond random:** evidence favors ordinary first-order/readout behavior for the tested mechanism.
-2. **Targeted and random produce similar later effects:** evidence favors generic hidden-state contamination or causal persistence.
+1. **No later effect beyond the corresponding same-layer random control:**
+   evidence favors ordinary first-order/readout behavior for that mechanism.
+2. **A targeted mechanism and its own random control produce similar later
+   effects:** evidence favors layer-local generic hidden-state contamination or
+   causal persistence.
 3. **Targeted and support-matched alternative reduce support similarly but produce different later candidate states:** evidence favors perturbation-specific traces rather than a representation of shared process reliability.
-4. **Targeted and support-matched alternative reduce support similarly, converge on the same later candidate response, exceed the norm-matched random response, replicate on held-out items, and disappear under reset:** stronger evidence for a process-sensitive representation of answer reliability or conflict.
+4. **Targeted and support-matched alternative reduce support similarly,
+   converge on the same later candidate response, each exceeds its own
+   same-layer random response, replicate on held-out items, and disappear under
+   reset:** stronger evidence for a process-sensitive representation of answer
+   reliability or conflict.
 5. **Outcome 4 plus convergent reductions in confidence margin:** stronger evidence for process-sensitive metacognitive monitoring despite identical visible answers.
 
 Outcome 4 may only be described as "evidence for a process-property / process-sensitive representation" or as "an `M(P)`-like candidate." It must not be described as a proven higher-order representation. Convergence alone does not establish that the candidate causally controls the later judgment.
