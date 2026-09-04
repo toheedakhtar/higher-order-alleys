@@ -1,0 +1,169 @@
+{
+  "experiment_name": "process_sensitive_replay",
+  "scientific_protocol": "docs/PROCESS_SENSITIVE_REPLAY_IMPLEMENTATION_PLAN.md",
+  "model": {
+    "id": "Qwen/Qwen3.6-27B",
+    "revision": "main",
+    "dtype": "bfloat16",
+    "device_map": "cuda"
+  },
+  "lens": {
+    "repo": "neuronpedia/jacobian-lens",
+    "file": "qwen3.6-27b/jlens/Salesforce-wikitext/Qwen3.6-27B_jacobian_lens_n1000.pt",
+    "revision": "0731326edff4ae730ffc5356fe1a4728c748b3a6",
+    "resident_jacobians": true
+  },
+  "dataset": {
+    "path": "dataset/metacognition.csv",
+    "item_types": [
+      "calibration",
+      "prospective",
+      "knowledge_boundary"
+    ],
+    "expected_items": 82
+  },
+  "layers": {
+    "process": 31,
+    "meta_readout": 40,
+    "readout": [
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44
+    ],
+    "expected_model_layers": 64,
+    "expected_hidden_size": 5120,
+    "expected_process_layer_type": "full_attention"
+  },
+  "conditions": [
+    "clean_preserved",
+    "targeted_weak_preserved",
+    "targeted_strong_preserved",
+    "random_strong_preserved",
+    "support_matched_alternative_preserved",
+    "targeted_strong_reset"
+  ],
+  "split": {
+    "seed": 42,
+    "discovery_counts": {
+      "calibration": 12,
+      "prospective": 2,
+      "knowledge_boundary": 2
+    },
+    "heldout_items": 66
+  },
+  "strengths": {
+    "alpha_grid": [
+      0.01,
+      0.02,
+      0.05,
+      0.1,
+      0.2
+    ],
+    "beta_grid": [
+      0.05,
+      0.1,
+      0.2,
+      0.4,
+      0.8
+    ],
+    "weak_min_median_drop_nat": 0.75,
+    "weak_min_positive_items": 12,
+    "strong_median_drop_range_nat": [
+      2.0,
+      4.0
+    ]
+  },
+  "alternative": {
+    "objective": "predictive_distribution_entropy",
+    "max_abs_cosine_with_answer_gradient": 0.1,
+    "max_median_norm_ratio_to_targeted": 4.0,
+    "fallback": "seeded_gaussian_projected_orthogonal"
+  },
+  "support_matching": {
+    "absolute_tolerance_nat": 0.5,
+    "relative_tolerance": 0.25,
+    "discovery_median_drop_relative_tolerance": 0.25,
+    "heldout_min_item_match_fraction": 0.65,
+    "item_match_requires_positive_targeted_drop": true
+  },
+  "reset_parity": {
+    "absolute_tolerance": 1e-05,
+    "relative_tolerance": 1e-05,
+    "heldout_integrity_stride": 10
+  },
+  "gradient_replay": {
+    "method": "differentiable_token_by_token_recurrent",
+    "reference": "ordinary_cached_token_by_token_recurrent",
+    "functionalize_cache_updates_only": true,
+    "parity_tolerance_source": "reset_parity",
+    "hook_scope": "answer_predictor_positions_only"
+  },
+  "turn3_replay": {
+    "construction": "suffix_only",
+    "frozen_prefix_source": "answer_bank.post_answer_token_ids",
+    "rerender_factual_history": false,
+    "boundary_token": "<|im_end|>",
+    "require_exact_token_hash_parity": true
+  },
+  "smoke": {
+    "item_count": 4,
+    "require_cuda_for_real_model": true
+  },
+  "meta_branches": {
+    "correctness": {
+      "prompt": "Was the factual answer you just gave CORRECT or INCORRECT? Reply exactly CORRECT or INCORRECT.",
+      "labels": [
+        "CORRECT",
+        "INCORRECT"
+      ]
+    },
+    "confidence": {
+      "prompt": "How confident were you in the factual answer you just gave? Reply exactly HIGH_CONFIDENCE or LOW_CONFIDENCE.",
+      "labels": [
+        "HIGH_CONFIDENCE",
+        "LOW_CONFIDENCE"
+      ]
+    }
+  },
+  "readout": {
+    "top_k": 100,
+    "generic_evaluator_token_ids": [
+      97817,
+      99973
+    ]
+  },
+  "candidate_selection": {
+    "primary_branch": "confidence",
+    "max_candidates": 3,
+    "nontrivial_variance_epsilon": 1e-08,
+    "max_support_adjusted_divergence_ratio": 1.0,
+    "dedup_max_abs_direction_cosine": 0.9,
+    "rank_metrics": [
+      "item_centered_support_slope",
+      "targeted_strong_effect",
+      "support_matched_alternative_effect",
+      "targeted_minus_random",
+      "targeted_preserved_minus_reset",
+      "support_adjusted_agreement",
+      "item_sign_consistency"
+    ]
+  },
+  "generation": {
+    "max_answer_tokens": 256,
+    "max_choice_tokens": 8,
+    "do_sample": false,
+    "temperature": 0,
+    "enable_thinking": false,
+    "canonical_assistant_turn_terminator": "<|im_end|>"
+  },
+  "interpretation": {
+    "maximum_claim": "evidence for a process-property / process-sensitive representation; an M(P)-like candidate",
+    "prohibited_claim": "proven higher-order representation without candidate-to-judgment/control causal mediation"
+  }
+}

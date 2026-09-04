@@ -1,0 +1,25 @@
+{
+  "input_hashes": {
+    "answer_bank": "69205174580696b50a6d5018fbabd359eb473eeeec2d9dcb66d307568fc70516",
+    "code": "b506c983c05af99813ccfa97b304f1f783fc57340c154eb74764f74d15d0f590",
+    "config": "84bea77bd18fa97e2801b90126e9964dfbbc875480cb6184964961e2aed5b11f",
+    "dataset": "4e98c0c7f8b7a25833fa8c2e2f55356f0995c5a8ace8e003c4d4c8bd0d0f83c6",
+    "lens_spec": "56542cc6dc4eb6736c4cb884960356596d4f3dfbdfd4bff39b49a40ab178f735",
+    "model_spec": "6a71bfe796f5dfed83addf1d3a4aae2f57dc0071f67c3912324f6f9dc11bebc3",
+    "scientific_protocol": "2620d6b964980d0aa55f6e244acc11b72705a20c2df977922e49f2a97842e413",
+    "split_manifest": "fd36f2826b8796518063375f8fbde8f10fea17eb4b9cfe09cb788376a7d38c99",
+    "thinking_mode_verification": "45b73542600f0132dfaf5019331b201b3b0b9049d8245c81675d88cf039acab5"
+  },
+  "measurements": {
+    "answers": 82,
+    "discovery_items": 16,
+    "excluded_invalid_items": 9,
+    "heldout_items": 57,
+    "invalid_answers": 9,
+    "thinking_mode_examples_verified": 3
+  },
+  "phase": "answer_bank",
+  "protocol_hash": "1f862614f89beb78b874e47493a4a14feccd85a1faad73d44abd93daebeb8b5c",
+  "reason": null,
+  "status": "passed"
+}

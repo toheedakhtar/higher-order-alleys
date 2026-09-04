@@ -1,0 +1,21 @@
+{
+  "input_hashes": {
+    "answer_bank": "69205174580696b50a6d5018fbabd359eb473eeeec2d9dcb66d307568fc70516",
+    "code": "b506c983c05af99813ccfa97b304f1f783fc57340c154eb74764f74d15d0f590",
+    "config": "84bea77bd18fa97e2801b90126e9964dfbbc875480cb6184964961e2aed5b11f",
+    "dataset": "4e98c0c7f8b7a25833fa8c2e2f55356f0995c5a8ace8e003c4d4c8bd0d0f83c6",
+    "discovery_alpha_diagnostics": "74a5e729e29da32c0aff1577f76a8f56146874d343b1ffb9ce79dc28ae0ef16d",
+    "discovery_alpha_grid": "90670454412c3b49b2c417de1b6bd56e7959896ac8d3851ad859fe21bf10cc6e",
+    "lens_spec": "56542cc6dc4eb6736c4cb884960356596d4f3dfbdfd4bff39b49a40ab178f735",
+    "model_spec": "6a71bfe796f5dfed83addf1d3a4aae2f57dc0071f67c3912324f6f9dc11bebc3",
+    "scientific_protocol": "2620d6b964980d0aa55f6e244acc11b72705a20c2df977922e49f2a97842e413",
+    "smoke_report": "7dc77822dcc0aaac09307710ed091878c88a985957572c42ed39a0fc3d5a1372",
+    "split_manifest": "fd36f2826b8796518063375f8fbde8f10fea17eb4b9cfe09cb788376a7d38c99",
+    "thinking_mode_verification": "45b73542600f0132dfaf5019331b201b3b0b9049d8245c81675d88cf039acab5"
+  },
+  "measurements": {},
+  "phase": "discovery",
+  "protocol_hash": "1f862614f89beb78b874e47493a4a14feccd85a1faad73d44abd93daebeb8b5c",
+  "reason": "alpha_strength_gate_failed: WEAK must be strictly smaller than STRONG; selected weak=0.1 strong=0.1",
+  "status": "failed"
+}
