@@ -1,0 +1,51 @@
+{
+  "grid": [
+    {
+      "alpha": 0.1,
+      "finite": true,
+      "median_support_drop": 1.3037085388541527,
+      "positive_items": 8,
+      "strong_fallback_eligible": true,
+      "strong_in_target_range": false,
+      "support_drops": [
+        1.6018770864454837,
+        1.1394658079593682,
+        0.5715669199234981,
+        1.2296165723782906,
+        0.8310097649041381,
+        1.3778005053300149,
+        62.73728253198351,
+        50.40297451137902
+      ],
+      "weak_eligible": true
+    },
+    {
+      "alpha": 0.11,
+      "finite": true,
+      "median_support_drop": 1.4459328668492617,
+      "positive_items": 8,
+      "strong_fallback_eligible": true,
+      "strong_in_target_range": false,
+      "support_drops": [
+        1.8063122574119461,
+        1.4088085902753846,
+        0.5729932637732418,
+        1.3283927410775505,
+        0.9127130493830009,
+        1.4830571434231388,
+        65.80195674403558,
+        54.336287325027875
+      ],
+      "weak_eligible": true
+    }
+  ],
+  "item_count": 8,
+  "strong_target_range_nat": [
+    2.0,
+    4.0
+  ],
+  "weak_rule": {
+    "minimum_median_drop_nat": 0.75,
+    "minimum_positive_items": 6
+  }
+}
