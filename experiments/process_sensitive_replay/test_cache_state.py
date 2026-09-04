@@ -93,6 +93,20 @@ class CacheStateTests(unittest.TestCase):
                 expected_sequence_length=3,
             )
 
+    def test_hybrid_integrity_requires_initialized_state_flags(self) -> None:
+        for attribute in (
+            "is_conv_states_initialized",
+            "is_recurrent_states_initialized",
+        ):
+            source = fake_cache()
+            getattr(source.layers[1], attribute)[0] = False
+            with self.assertRaisesRegex(AssertionError, "initialization flags"):
+                assert_hybrid_cache_integrity(
+                    source,
+                    layer_types=["full_attention", "linear_attention", "full_attention"],
+                    expected_sequence_length=3,
+                )
+
     def test_process_must_change_only_downstream_state(self) -> None:
         clean_cache = fake_cache()
         changed_cache = clone_hybrid_cache(clean_cache)

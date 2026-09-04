@@ -184,7 +184,28 @@ def assert_hybrid_cache_integrity(
                 raise AssertionError(f"linear-attention conv state {index} is uninitialized")
             if not all(torch.is_tensor(value) and value.numel() for value in recurrent.values()):
                 raise AssertionError(f"linear-attention recurrent state {index} is uninitialized")
-            if not all(getattr(layer, "has_previous_state", {}).values()):
+            conv_initialized = getattr(layer, "is_conv_states_initialized", None)
+            recurrent_initialized = getattr(layer, "is_recurrent_states_initialized", None)
+            for name, flags, states in (
+                ("convolution", conv_initialized, conv),
+                ("recurrent", recurrent_initialized, recurrent),
+            ):
+                if (
+                    not isinstance(flags, Mapping)
+                    or set(flags) != set(states)
+                    or not flags
+                    or not all(value is True for value in flags.values())
+                ):
+                    raise AssertionError(
+                        f"linear-attention {name} initialization flags are invalid at layer {index}"
+                    )
+            previous = getattr(layer, "has_previous_state", None)
+            if (
+                not isinstance(previous, Mapping)
+                or set(previous) != set(recurrent)
+                or not previous
+                or not all(value is True for value in previous.values())
+            ):
                 raise AssertionError(f"linear-attention layer {index} has no previous-state flag")
         else:
             raise AssertionError(f"unexpected layer type {layer_type!r} at {index}")
@@ -230,4 +251,3 @@ def assert_numeric_parity(
         if left.shape == right.shape and left.numel():
             maximum = float((left.float() - right.float()).abs().max().item())
         raise AssertionError(f"reset parity failed for {context}; max_abs_difference={maximum}")
-

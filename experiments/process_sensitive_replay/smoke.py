@@ -21,7 +21,7 @@ from .gradient_intervention import (
     compute_clean_gradients,
 )
 from .jlens_readout import readout_layers
-from .protocol import support_match_summary
+from .protocol import item_support_matched, support_match_summary
 from .replay import (
     QwenReplayAdapter,
     append_meta_prompt,
@@ -185,12 +185,14 @@ def run_smoke_item(
     frozen_protocol: Mapping[str, Any] | None = None,
     include_full_vocab: bool = False,
 ) -> dict[str, Any]:
-    if phase not in {"pre_discovery_smoke", "post_freeze_smoke", "discovery"}:
+    if phase not in {
+        "pre_discovery_smoke", "post_freeze_smoke", "discovery", "heldout"
+    }:
         raise ValueError(f"unsupported replay phase: {phase}")
     if bool(answer.get("invalid")):
         raise ValueError(f"smoke item {answer['item_id']} has an invalid canonical answer")
-    if phase == "post_freeze_smoke" and frozen_protocol is None:
-        raise RuntimeError("post-freeze smoke requires frozen_protocol.json")
+    if phase in {"post_freeze_smoke", "heldout"} and frozen_protocol is None:
+        raise RuntimeError(f"{phase} requires frozen_protocol.json")
     if phase == "discovery" and frozen_protocol is None:
         raise RuntimeError("discovery candidate replay requires selected strengths")
     if include_full_vocab and phase != "discovery":
@@ -287,6 +289,11 @@ def run_smoke_item(
             layer_types=layer_types,
             expected_sequence_length=expected_length,
         )
+        if (
+            not math.isfinite(float(outcome.answer_sequence_logp))
+            or not all(math.isfinite(float(value)) for value in outcome.token_logprobs)
+        ):
+            raise AssertionError("replay produced non-finite answer support or logits")
     assert_process_propagated(
         clean.cache_audit, targeted.cache_audit,
         process_layer=int(config["layers"]["process"]),
@@ -311,7 +318,7 @@ def run_smoke_item(
     )
     target_drop = clean.answer_sequence_logp - targeted.answer_sequence_logp
     alternative_drop = clean.answer_sequence_logp - alternative.answer_sequence_logp
-    if target_drop <= 0 and phase != "discovery":
+    if target_drop <= 0 and phase in {"pre_discovery_smoke", "post_freeze_smoke"}:
         raise AssertionError("targeted intervention did not reduce answer support")
 
     explicit = [int(value) for value in config["readout"]["generic_evaluator_token_ids"]]
@@ -333,6 +340,40 @@ def run_smoke_item(
         raise AssertionError(
             f"process hook fired {turn3_process_hook_calls} times during Turn 3"
         )
+    for condition, branches in meta.items():
+        for branch_name, branch in branches.items():
+            if not bool(torch.isfinite(branch["_boundary_logits"]).all().item()):
+                raise AssertionError(
+                    f"non-finite Turn-3 boundary logits for {condition}/{branch_name}"
+                )
+            if not all(
+                bool(torch.isfinite(value).all().item())
+                for value in branch["_question_residuals"].values()
+            ):
+                raise AssertionError(
+                    f"non-finite Turn-3 residual for {condition}/{branch_name}"
+                )
+            score_values = [float(branch["scores"]["margin"])]
+            score_values.extend(
+                float(branch["scores"][label]["sequence_logprob"])
+                for label in branch["labels"]
+            )
+            if not all(math.isfinite(value) for value in score_values):
+                raise AssertionError(
+                    f"non-finite Turn-3 label score for {condition}/{branch_name}"
+                )
+            for layer_data in branch["jlens"].values():
+                readout_scores = [
+                    float(entry["score"]) for entry in layer_data["top_k"]
+                ]
+                readout_scores.extend(
+                    float(entry["score"])
+                    for entry in layer_data["explicit"].values()
+                )
+                if not all(math.isfinite(value) for value in readout_scores):
+                    raise AssertionError(
+                        f"non-finite J-Lens score for {condition}/{branch_name}"
+                    )
     for branch_name in config["meta_branches"]:
         clean_branch = meta["clean_preserved"][branch_name]
         reset_branch = meta["clean_reset"][branch_name]
@@ -365,11 +406,41 @@ def run_smoke_item(
                     context=f"clean reset {branch_name} layer {layer} token {token_id}",
                 )
         targeted_reset_branch = meta["targeted_strong_reset"][branch_name]
+        if (
+            clean_branch["suffix_token_hash"]
+            != targeted_reset_branch["suffix_token_hash"]
+        ):
+            raise AssertionError("targeted reset Turn-3 token parity failed")
+        if (
+            clean_branch["boundary_cache_digest"]
+            != targeted_reset_branch["boundary_cache_digest"]
+        ):
+            raise AssertionError("targeted reset Turn-3 boundary cache parity failed")
         assert_numeric_parity(
             clean_branch["_boundary_logits"], targeted_reset_branch["_boundary_logits"],
             atol=atol, rtol=rtol,
             context=f"targeted reset {branch_name} full logits",
         )
+        assert_numeric_parity(
+            torch.tensor([clean_branch["scores"]["margin"]]),
+            torch.tensor([targeted_reset_branch["scores"]["margin"]]),
+            atol=atol, rtol=rtol, context=f"targeted reset {branch_name} margin",
+        )
+        for layer in config["layers"]["readout"]:
+            assert_numeric_parity(
+                clean_branch["_question_residuals"][str(layer)],
+                targeted_reset_branch["_question_residuals"][str(layer)],
+                atol=atol, rtol=rtol,
+                context=f"targeted reset {branch_name} layer {layer} residual",
+            )
+            for token_id in explicit:
+                left = clean_branch["jlens"][str(layer)]["explicit"][str(token_id)]["score"]
+                right = targeted_reset_branch["jlens"][str(layer)]["explicit"][str(token_id)]["score"]
+                assert_numeric_parity(
+                    torch.tensor([left]), torch.tensor([right]),
+                    atol=atol, rtol=rtol,
+                    context=f"targeted reset {branch_name} layer {layer} token {token_id}",
+                )
     for branch_name in config["meta_branches"]:
         hash_fields = (
             "prefix_token_hash",
@@ -470,6 +541,18 @@ def run_smoke_item(
             condition=label,
             support_after=target_grid[alpha].answer_sequence_logp,
         ))
+        if (
+            frozen_protocol is not None
+            and alpha == float(frozen_protocol["strong_alpha"])
+        ):
+            reset_rows = intervention_records(
+                schedule.positions,
+                condition="targeted_strong_reset",
+                support_after=target_grid[alpha].answer_sequence_logp,
+            )
+            for row in reset_rows:
+                row["state_disposition"] = "discarded_and_reconstructed_clean_before_turn3"
+            intervention_records_all.extend(reset_rows)
     for beta, schedule in alternative_schedules.items():
         label = (
             "support_matched_alternative_preserved"
@@ -503,6 +586,22 @@ def run_smoke_item(
             "targeted_drop": target_drop,
             "alternative_drop": alternative_drop,
             "random_drop": clean.answer_sequence_logp - random_control.answer_sequence_logp,
+            "condition_drops": {
+                "clean_preserved": 0.0,
+                "targeted_weak_preserved": (
+                    clean.answer_sequence_logp
+                    - target_grid[float(frozen_protocol["weak_alpha"])].answer_sequence_logp
+                    if frozen_protocol is not None else None
+                ),
+                "targeted_strong_preserved": target_drop,
+                "random_strong_preserved": (
+                    clean.answer_sequence_logp - random_control.answer_sequence_logp
+                ),
+                "support_matched_alternative_preserved": alternative_drop,
+                # The targeted first-order process occurred; only its stored
+                # state is discarded and reconstructed cleanly before Turn 3.
+                "targeted_strong_reset": target_drop,
+            },
         },
         "hashes": {
             condition: {
@@ -581,6 +680,32 @@ def summarize_smoke(
         "critical_checks": sorted(required_checks),
     }
     if phase == "post_freeze_smoke":
+        support_config = config["support_matching"]
+        item_measurements = []
+        for record in records:
+            targeted_drop = float(record["support"]["targeted_drop"])
+            alternative_drop = float(record["support"]["alternative_drop"])
+            tolerance = max(
+                float(support_config["absolute_tolerance_nat"]),
+                float(support_config["relative_tolerance"]) * abs(targeted_drop),
+            )
+            item_measurements.append({
+                "item_id": str(record["item_id"]),
+                "targeted_drop": targeted_drop,
+                "alternative_drop": alternative_drop,
+                "signed_mismatch": alternative_drop - targeted_drop,
+                "absolute_mismatch": abs(alternative_drop - targeted_drop),
+                "item_tolerance": tolerance,
+                "targeted_drop_positive": targeted_drop > 0,
+                "support_matched": item_support_matched(
+                    targeted_drop,
+                    alternative_drop,
+                    absolute_tolerance_nat=float(
+                        support_config["absolute_tolerance_nat"]
+                    ),
+                    relative_tolerance=float(support_config["relative_tolerance"]),
+                ),
+            })
         matching = support_match_summary(
             [
                 (record["support"]["targeted_drop"], record["support"]["alternative_drop"])
@@ -589,8 +714,10 @@ def summarize_smoke(
             config,
         )
         result["support_matching"] = matching
+        result["item_support_matching"] = item_measurements
         if not matching["passed"]:
-            raise RuntimeError("support_match_gate_failed")
+            result["passed"] = False
+            result["failure_reason"] = "support_match_gate_failed"
     else:
         result["support_matching"] = {
             "required": False,

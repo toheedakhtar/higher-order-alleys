@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import argparse
 import unittest
 import tempfile
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from experiments.process_sensitive_replay.protocol import load_config
-from experiments.process_sensitive_replay.runner import main, require_cuda_host
+from experiments.process_sensitive_replay.runner import (
+    PhaseGateFailure,
+    campaign_hashes,
+    main,
+    require_cuda_host,
+    run_smoke_phase,
+)
 from experiments.process_sensitive_replay.smoke import summarize_smoke
 
 
@@ -54,12 +62,78 @@ class SmokeGateTests(unittest.TestCase):
     def test_post_freeze_smoke_enforces_support_matching(self) -> None:
         records = [smoke_record(str(index), 2.0, 2.1) for index in range(4)]
         self.assertTrue(summarize_smoke(records, self.config, phase="post_freeze_smoke")["passed"])
-        with self.assertRaisesRegex(RuntimeError, "support_match_gate_failed"):
-            summarize_smoke(
-                [smoke_record(str(index), 2.0, 5.0) for index in range(4)],
-                self.config,
-                phase="post_freeze_smoke",
+        failed = summarize_smoke(
+            [smoke_record(str(index), 2.0, 5.0) for index in range(4)],
+            self.config,
+            phase="post_freeze_smoke",
+        )
+        self.assertFalse(failed["passed"])
+        self.assertEqual(failed["failure_reason"], "support_match_gate_failed")
+
+    def test_failed_post_freeze_smoke_persists_phase_local_report(self) -> None:
+        records = [smoke_record(str(index), 2.0, 5.0) for index in range(4)]
+        for record in records:
+            record["phase"] = "post_freeze_smoke"
+        with tempfile.TemporaryDirectory() as temporary:
+            run_dir = Path(temporary)
+            args = argparse.Namespace(phase="post_freeze_smoke", hf_cache_dir=None)
+            split = {"discovery_item_ids": [str(index) for index in range(16)]}
+            answers = [{"item_id": str(index)} for index in range(16)]
+
+            def write_trial_stub(directory, _records):
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "trial_summary.csv").write_text("item_id\n", encoding="utf-8")
+
+            def write_candidate_stub(directory, _records):
+                directory.mkdir(parents=True, exist_ok=True)
+                (directory / "candidate_scores.csv").write_text("item_id\n", encoding="utf-8")
+
+            with (
+                patch(
+                    "experiments.process_sensitive_replay.runner._load_campaign_inputs",
+                    return_value=(answers, split),
+                ),
+                patch("experiments.process_sensitive_replay.runner._load_pre_discovery_smoke_hash"),
+                patch("experiments.process_sensitive_replay.runner._load_discovery_hashes"),
+                patch(
+                    "experiments.process_sensitive_replay.runner._load_and_validate_frozen_protocol",
+                    return_value={"weak_alpha": 0.1, "strong_alpha": 0.11, "beta": 0.2},
+                ),
+                patch("experiments.process_sensitive_replay.runner.assert_phase_prerequisites"),
+                patch(
+                    "experiments.process_sensitive_replay.runner.load_runtime",
+                    return_value=(None, None, None, None, None, {}),
+                ),
+                patch(
+                    "experiments.process_sensitive_replay.runner.run_smoke_item",
+                    side_effect=records,
+                ),
+                patch("experiments.process_sensitive_replay.runner._log_smoke_record"),
+                patch(
+                    "experiments.process_sensitive_replay.runner._write_trial_summary",
+                    side_effect=write_trial_stub,
+                ),
+                patch(
+                    "experiments.process_sensitive_replay.runner._write_candidate_scores",
+                    side_effect=write_candidate_stub,
+                ),
+            ):
+                with self.assertRaises(PhaseGateFailure) as raised:
+                    run_smoke_phase(
+                        args,
+                        run_dir,
+                        self.config,
+                        campaign_hashes(CONFIG_PATH, self.config),
+                    )
+            report_path = run_dir / "post_freeze_smoke" / "smoke_report.json"
+            self.assertTrue(report_path.is_file())
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertFalse(report["passed"])
+            self.assertEqual(len(report["item_support_matching"]), 4)
+            self.assertTrue(
+                (run_dir / "post_freeze_smoke" / "trials.jsonl").is_file()
             )
+            self.assertEqual(raised.exception.measurements, report)
 
     def test_any_critical_assertion_blocks_smoke(self) -> None:
         record = smoke_record("1", 2.0, 2.0)

@@ -25,7 +25,7 @@ class DiscoveryExecutionTests(unittest.TestCase):
     def test_complete_discovery_grid_selects_global_strengths(self) -> None:
         alpha_drops = dict(zip(
             [float(value) for value in self.config["strengths"]["alpha_grid"]],
-            (0.1, 0.8, 1.5, 2.5, 4.5),
+            (0.1, 0.3, 0.7, 1.0, 2.2, 3.0, 4.0, 5.0),
             strict=True,
         ))
         beta_drops = dict(zip(
@@ -59,8 +59,8 @@ class DiscoveryExecutionTests(unittest.TestCase):
 
         selected = select_discovery_strengths(records, self.config)
 
-        self.assertEqual(selected["alpha"]["weak_alpha"], 0.02)
-        self.assertEqual(selected["alpha"]["strong_alpha"], 0.1)
+        self.assertEqual(selected["alpha"]["weak_alpha"], 0.1)
+        self.assertEqual(selected["alpha"]["strong_alpha"], 0.11)
         self.assertEqual(selected["beta"]["beta"], 0.2)
         self.assertTrue(selected["beta"]["diagnostics"]["passed"])
 
@@ -95,7 +95,7 @@ class DiscoveryExecutionTests(unittest.TestCase):
         self.assertEqual(orientations[(37, 3)], -1)
 
     def test_alpha_collision_is_reportable_before_gate_failure(self) -> None:
-        drops = (0.1, 0.2, 0.3, 2.5, 5.0)
+        drops = (0.1, 0.2, 0.3, 2.5, 5.0, 5.5, 6.0, 7.0)
         records = []
         for item_index in range(16):
             records.append({

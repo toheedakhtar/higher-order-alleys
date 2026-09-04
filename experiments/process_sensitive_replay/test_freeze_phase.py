@@ -41,7 +41,10 @@ class FreezePhaseTests(unittest.TestCase):
             )
             smoke_dir = run_dir / "pre_discovery_smoke"
             smoke_dir.mkdir()
+            (smoke_dir / "trials.jsonl").write_text("{}\n", encoding="utf-8")
             (smoke_dir / "smoke_report.json").write_text("{}\n", encoding="utf-8")
+            (smoke_dir / "trial_summary.csv").write_text("item_id\n", encoding="utf-8")
+            (smoke_dir / "candidate_scores.csv").write_text("item_id\n", encoding="utf-8")
             discovery_dir = run_dir / "discovery"
             discovery_dir.mkdir()
             for filename in (

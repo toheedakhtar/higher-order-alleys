@@ -100,11 +100,34 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
         raise ValueError("experiment name changed")
     if tuple(config.get("conditions", ())) != EXPECTED_CONDITIONS:
         raise ValueError("frozen condition order changed")
+    model = config["model"]
+    pinned_model_revision = "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9"
+    if (
+        model.get("revision") != pinned_model_revision
+        or model.get("tokenizer_revision") != pinned_model_revision
+    ):
+        raise ValueError("model and tokenizer must use the frozen resolved revision")
+    lens = config["lens"]
+    if (
+        lens.get("revision") != "0731326edff4ae730ffc5356fe1a4728c748b3a6"
+        or lens.get("sha256")
+        != "1718c8c52dd8a9dad03738d4d625937c1fbba10be325b872ed446c7290fc11e1"
+    ):
+        raise ValueError("J-Lens revision or file SHA-256 changed")
     layers = config["layers"]
     if int(layers["process"]) != 31 or int(layers["meta_readout"]) != 40:
         raise ValueError("frozen process/meta layer changed")
     if list(layers["readout"]) != list(range(36, 45)):
         raise ValueError("frozen J-Lens readout layers changed")
+    strengths = config["strengths"]
+    if [float(value) for value in strengths["alpha_grid"]] != [
+        0.01, 0.02, 0.05, 0.1, 0.11, 0.125, 0.15, 0.2
+    ]:
+        raise ValueError("declared psr-v7 alpha grid changed")
+    if [float(value) for value in strengths["beta_grid"]] != [
+        0.05, 0.1, 0.2, 0.4, 0.8
+    ]:
+        raise ValueError("frozen beta grid changed")
     support = config["support_matching"]
     if (
         float(support["absolute_tolerance_nat"]) != 0.5

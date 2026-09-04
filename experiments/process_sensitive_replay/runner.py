@@ -1,4 +1,4 @@
-"""Fail-closed runner for process-sensitive replay through protocol freeze."""
+"""Fail-closed runner for the complete process-sensitive replay protocol."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import socket
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 import torch
 
@@ -26,6 +26,12 @@ from experiments.higher_v_readout_global.steering import (
 )
 
 from .answer_bank import discover_answer
+from .analysis import (
+    analyze_candidate_effects,
+    generate_required_plots,
+    generate_support_match_plot,
+    json_safe,
+)
 from .discovery import (
     DISCOVERY_CANDIDATE_CONDITIONS,
     alpha_grid_diagnostics,
@@ -45,8 +51,10 @@ from .protocol import (
     load_config,
     load_dataset,
     gate_path,
+    item_support_matched,
     sha256_file,
     sha256_json,
+    support_match_summary,
     validate_frozen_protocol,
     validate_config,
     write_gate,
@@ -65,12 +73,42 @@ SUPPORTED_PHASES = (
     "discovery",
     "freeze",
     "post_freeze_smoke",
+    "heldout",
+    "analyze",
 )
 LOG_FILES = (
     "events.jsonl", "raw_runs.jsonl", "process_interventions.jsonl",
     "tokenizations.jsonl", "jlens_readouts.jsonl", "state_audits.jsonl",
     "errors.jsonl",
 )
+RUNTIME_PACKAGE_NAMES = ("torch", "transformers", "jlens", "huggingface-hub")
+BASE_IDENTITY_HASH_KEYS = (
+    "config",
+    "dataset",
+    "scientific_protocol",
+    "code",
+    "model_spec",
+    "lens_spec",
+    "model_revision",
+    "tokenizer_revision",
+    "lens_revision",
+    "lens_sha256",
+    "runtime_packages",
+)
+
+
+class PhaseGateFailure(RuntimeError):
+    """A fail-closed phase result whose diagnostics must survive runner exit."""
+
+    def __init__(
+        self,
+        status: str,
+        reason: str,
+        measurements: Mapping[str, Any],
+    ) -> None:
+        super().__init__(reason)
+        self.status = status
+        self.measurements = dict(measurements)
 
 
 def utc_now() -> str:
@@ -129,6 +167,7 @@ def code_hash() -> str:
 def campaign_hashes(config_path: Path, config: Mapping[str, Any]) -> dict[str, str]:
     dataset_path = REPO_ROOT / str(config["dataset"]["path"])
     protocol_path = REPO_ROOT / str(config["scientific_protocol"])
+    packages = package_versions(RUNTIME_PACKAGE_NAMES)
     return {
         "config": sha256_file(config_path),
         "dataset": sha256_file(dataset_path),
@@ -136,11 +175,16 @@ def campaign_hashes(config_path: Path, config: Mapping[str, Any]) -> dict[str, s
         "code": code_hash(),
         "model_spec": sha256_json(config["model"]),
         "lens_spec": sha256_json(config["lens"]),
+        "model_revision": str(config["model"]["revision"]),
+        "tokenizer_revision": str(config["model"]["tokenizer_revision"]),
+        "lens_revision": str(config["lens"]["revision"]),
+        "lens_sha256": str(config["lens"]["sha256"]),
+        "runtime_packages": sha256_json(packages),
     }
 
 
 def combined_protocol_hash(hashes: Mapping[str, str]) -> str:
-    return sha256_json({key: hashes[key] for key in ("config", "scientific_protocol", "code")})
+    return sha256_json({key: hashes[key] for key in BASE_IDENTITY_HASH_KEYS})
 
 
 def package_versions(names: Iterable[str]) -> dict[str, str | None]:
@@ -174,7 +218,7 @@ def write_manifest(
         "hostname": socket.gethostname(),
         "platform": platform.platform(),
         "python": sys.version,
-        "packages": package_versions(("torch", "transformers", "jlens", "huggingface-hub")),
+        "packages": package_versions(RUNTIME_PACKAGE_NAMES),
         "hashes": dict(hashes),
         "runtime": previous.get("runtime") if runtime is None else dict(runtime),
         "config": dict(config),
@@ -236,6 +280,31 @@ def load_runtime(
         for layer in lens.source_layers:
             device = next(lens_model.layers[layer].parameters()).device
             lens.jacobians[layer] = lens.jacobians[layer].to(device)
+    expected_model_revision = str(config["model"]["revision"])
+    expected_tokenizer_revision = str(config["model"]["tokenizer_revision"])
+    model_revision = getattr(hf_model.config, "_commit_hash", None)
+    if model_revision != expected_model_revision:
+        raise RuntimeError(
+            "resolved model revision differs from the frozen commit: "
+            f"expected={expected_model_revision} observed={model_revision}"
+        )
+    detected_tokenizer_revision = getattr(tokenizer, "init_kwargs", {}).get("_commit_hash")
+    if (
+        detected_tokenizer_revision is not None
+        and detected_tokenizer_revision != expected_tokenizer_revision
+    ):
+        raise RuntimeError(
+            "resolved tokenizer revision differs from the frozen commit: "
+            f"expected={expected_tokenizer_revision} observed={detected_tokenizer_revision}"
+        )
+    lens_sha256 = None if lens_path is None else sha256_file(Path(lens_path))
+    if lens is not None:
+        if lens_revision != str(config["lens"]["revision"]):
+            raise RuntimeError("resolved J-Lens revision differs from the frozen commit")
+        if lens_sha256 != str(config["lens"]["sha256"]):
+            raise RuntimeError(
+                "resolved J-Lens file SHA-256 differs from the frozen checksum"
+            )
     runtime = {
         "architecture": type(hf_model).__name__,
         "model_type": text_config.model_type,
@@ -249,9 +318,20 @@ def load_runtime(
         "lens_revision": lens_revision,
         "lens_source_layers": None if lens is None else list(lens.source_layers),
         "jlens_force_bos": False,
-        "model_resolved_revision": getattr(hf_model.config, "_commit_hash", None),
-        "tokenizer_resolved_revision": getattr(tokenizer, "init_kwargs", {}).get("_commit_hash"),
-        "lens_sha256": None if lens_path is None else sha256_file(Path(lens_path)),
+        "model_resolved_revision": model_revision,
+        # AutoTokenizer does not consistently expose _commit_hash. The exact
+        # immutable revision passed to from_pretrained remains authoritative;
+        # a conflicting exposed revision is rejected above.
+        "tokenizer_resolved_revision": (
+            detected_tokenizer_revision or expected_tokenizer_revision
+        ),
+        "tokenizer_revision_source": (
+            "tokenizer_metadata"
+            if detected_tokenizer_revision is not None
+            else "frozen_from_pretrained_argument"
+        ),
+        "lens_sha256": lens_sha256,
+        "runtime_packages": package_versions(RUNTIME_PACKAGE_NAMES),
     }
     return hf_model, tokenizer, lens_model, lens, adapter, runtime
 
@@ -491,9 +571,46 @@ def _load_campaign_inputs(run_dir: Path, hashes: dict[str, str]) -> tuple[list[d
 
 
 def _load_pre_discovery_smoke_hash(run_dir: Path, hashes: dict[str, str]) -> None:
-    hashes["smoke_report"] = sha256_file(
-        run_dir / "pre_discovery_smoke" / "smoke_report.json"
+    directory = run_dir / "pre_discovery_smoke"
+    hashes["pre_discovery_smoke_trials"] = sha256_file(directory / "trials.jsonl")
+    hashes["pre_discovery_smoke_report"] = sha256_file(directory / "smoke_report.json")
+    hashes["pre_discovery_smoke_trial_summary"] = sha256_file(
+        directory / "trial_summary.csv"
     )
+    hashes["pre_discovery_smoke_candidate_scores"] = sha256_file(
+        directory / "candidate_scores.csv"
+    )
+
+
+def _load_post_freeze_smoke_hash(run_dir: Path, hashes: dict[str, str]) -> None:
+    directory = run_dir / "post_freeze_smoke"
+    hashes["post_freeze_smoke_trials"] = sha256_file(directory / "trials.jsonl")
+    hashes["post_freeze_smoke_report"] = sha256_file(directory / "smoke_report.json")
+    hashes["post_freeze_smoke_trial_summary"] = sha256_file(
+        directory / "trial_summary.csv"
+    )
+    hashes["post_freeze_smoke_candidate_scores"] = sha256_file(
+        directory / "candidate_scores.csv"
+    )
+
+
+def _load_heldout_hashes(run_dir: Path, hashes: dict[str, str]) -> None:
+    for name, path in (
+        ("heldout_trials", run_dir / "heldout" / "trials.jsonl"),
+        ("heldout_trial_summary", run_dir / "heldout" / "trial_summary.csv"),
+        ("heldout_candidate_scores", run_dir / "heldout" / "candidate_scores.csv"),
+        ("heldout_support_match", run_dir / "heldout_support_match.csv"),
+        (
+            "heldout_support_match_summary",
+            run_dir / "heldout" / "support_match_summary.json",
+        ),
+        (
+            "heldout_support_match_plot",
+            run_dir / "heldout" / "support_match_diagnostic.png",
+        ),
+        ("heldout_effects", run_dir / "heldout_effects.csv"),
+    ):
+        hashes[name] = sha256_file(path)
 
 
 def _load_discovery_hashes(run_dir: Path, hashes: dict[str, str]) -> None:
@@ -568,7 +685,7 @@ def _candidate_support_row(
         clean - float(target_grid[str(float(strong_alpha))]),
         float(record["support"]["random_drop"]),
         float(record["support"]["alternative_drop"]),
-        0.0,
+        clean - float(target_grid[str(float(strong_alpha))]),
     ]
 
 
@@ -580,6 +697,118 @@ def _assert_candidate_direction_files(
         direction_path = run_dir / str(candidate["direction_path"])
         if sha256_file(direction_path) != candidate["direction_file_sha256"]:
             raise AssertionError("stale candidate direction file hash")
+
+
+def _load_and_validate_frozen_protocol(
+    run_dir: Path,
+    config: Mapping[str, Any],
+    split: Mapping[str, Any],
+    hashes: dict[str, str],
+) -> dict[str, Any]:
+    frozen_path = run_dir / "frozen_protocol.json"
+    frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
+    frozen_sources = {
+        str(name): hashes[str(name)]
+        for name in frozen.get("source_hashes", {})
+    }
+    validate_frozen_protocol(frozen, config, split, frozen_sources)
+    _assert_candidate_direction_files(run_dir, frozen["candidates"])
+    hashes["frozen_protocol"] = sha256_file(frozen_path)
+    return frozen
+
+
+def heldout_support_rows(
+    records: Iterable[Mapping[str, Any]],
+    config: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    support = config["support_matching"]
+    rows = []
+    for record in records:
+        targeted = float(record["support"]["targeted_drop"])
+        alternative = float(record["support"]["alternative_drop"])
+        mismatch = alternative - targeted
+        tolerance = max(
+            float(support["absolute_tolerance_nat"]),
+            float(support["relative_tolerance"]) * abs(targeted),
+        )
+        rows.append({
+            "item_id": str(record["item_id"]),
+            "support_drop_targeted": targeted,
+            "support_drop_alternative": alternative,
+            "signed_mismatch_alternative_minus_targeted": mismatch,
+            "absolute_mismatch": abs(mismatch),
+            "item_tolerance": tolerance,
+            "targeted_drop_positive": targeted > 0,
+            "support_matched": item_support_matched(
+                targeted,
+                alternative,
+                absolute_tolerance_nat=float(support["absolute_tolerance_nat"]),
+                relative_tolerance=float(support["relative_tolerance"]),
+            ),
+        })
+    return rows
+
+
+def _write_rows_csv(path: Path, rows: list[Mapping[str, Any]]) -> None:
+    if not rows:
+        raise ValueError(f"cannot write empty table {path.name}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fields = list(rows[0])
+    if any(list(row) != fields for row in rows):
+        raise ValueError(f"inconsistent columns while writing {path.name}")
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def heldout_effect_rows(
+    records: Iterable[Mapping[str, Any]],
+    frozen: Mapping[str, Any],
+    config: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    rows = []
+    conditions = [str(value) for value in config["conditions"]]
+    for record in records:
+        clean_support = float(record["support"]["clean"])
+        target_grid = record["support"]["target_grid"]
+        support_drops = {
+            "clean_preserved": 0.0,
+            "targeted_weak_preserved": clean_support - float(
+                target_grid[str(float(frozen["weak_alpha"]))]
+            ),
+            "targeted_strong_preserved": float(record["support"]["targeted_drop"]),
+            "random_strong_preserved": float(record["support"]["random_drop"]),
+            "support_matched_alternative_preserved": float(
+                record["support"]["alternative_drop"]
+            ),
+            "targeted_strong_reset": float(record["support"]["targeted_drop"]),
+        }
+        for candidate_rank, candidate in enumerate(frozen["candidates"], start=1):
+            layer = str(int(candidate["layer"]))
+            token_id = str(int(candidate["token_id"]))
+            orientation = int(candidate["orientation"])
+            for branch in config["meta_branches"]:
+                for condition in conditions:
+                    branch_data = record["meta"][condition][branch]
+                    raw_score = float(
+                        branch_data["jlens"][layer]["explicit"][token_id]["score"]
+                    )
+                    rows.append({
+                        "item_id": str(record["item_id"]),
+                        "candidate_rank": candidate_rank,
+                        "candidate_label": str(candidate["label"]),
+                        "candidate_layer": int(candidate["layer"]),
+                        "candidate_token_id": int(candidate["token_id"]),
+                        "candidate_orientation": orientation,
+                        "branch": str(branch),
+                        "condition": condition,
+                        "support_drop": support_drops[condition],
+                        "candidate_score": raw_score,
+                        "oriented_candidate_score": orientation * raw_score,
+                        "choice_margin": float(branch_data["scores"]["margin"]),
+                    })
+    return rows
 
 
 def run_discovery_phase(
@@ -1072,11 +1301,9 @@ def run_smoke_phase(
     if phase == "post_freeze_smoke":
         _load_pre_discovery_smoke_hash(run_dir, hashes)
         _load_discovery_hashes(run_dir, hashes)
-        frozen_path = run_dir / "frozen_protocol.json"
-        frozen = json.loads(frozen_path.read_text(encoding="utf-8"))
-        validate_frozen_protocol(frozen, config, split, dict(hashes))
-        _assert_candidate_direction_files(run_dir, frozen["candidates"])
-        hashes["frozen_protocol"] = sha256_file(frozen_path)
+        frozen = _load_and_validate_frozen_protocol(
+            run_dir, config, split, hashes
+        )
     assert_phase_prerequisites(
         run_dir, phase, protocol_hash=combined_protocol_hash(hashes),
         required_input_hashes=hashes,
@@ -1085,6 +1312,11 @@ def run_smoke_phase(
     write_manifest(run_dir, phase=phase, status="running", config=config, hashes=hashes, runtime=runtime)
     by_id = {str(record["item_id"]): record for record in answers}
     item_ids = split["discovery_item_ids"][: int(config["smoke"]["item_count"])]
+    phase_dir = run_dir / phase
+    phase_dir.mkdir(parents=True, exist_ok=True)
+    trials_path = phase_dir / "trials.jsonl"
+    if trials_path.exists() and trials_path.stat().st_size:
+        raise RuntimeError(f"{phase} trials already contain data; start a new campaign")
     records = []
     for item_id in item_ids:
         append_jsonl(run_dir / "events.jsonl", {
@@ -1096,19 +1328,422 @@ def run_smoke_phase(
             phase=phase, frozen_protocol=frozen,
         )
         records.append(record)
+        append_jsonl(trials_path, record)
         _log_smoke_record(run_dir, record)
     report = summarize_smoke(records, config, phase=phase)
     report_path = run_dir / phase / "smoke_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    _write_trial_summary(run_dir, records)
-    _write_candidate_scores(run_dir, records)
-    hashes["smoke_report"] = sha256_file(report_path)
+    _write_trial_summary(phase_dir, records)
+    _write_candidate_scores(phase_dir, records)
+    report_hash_name = (
+        "post_freeze_smoke_report"
+        if phase == "post_freeze_smoke"
+        else "pre_discovery_smoke_report"
+    )
+    hashes[report_hash_name] = sha256_file(report_path)
+    hashes[f"{phase}_trials"] = sha256_file(trials_path)
+    hashes[f"{phase}_trial_summary"] = sha256_file(phase_dir / "trial_summary.csv")
+    hashes[f"{phase}_candidate_scores"] = sha256_file(
+        phase_dir / "candidate_scores.csv"
+    )
+    if report.get("passed") is not True:
+        raise PhaseGateFailure(
+            "invalid_support_match",
+            str(report.get("failure_reason", "support_match_gate_failed")),
+            report,
+        )
     write_gate(run_dir, GateStatus(
         phase=phase, status="passed", protocol_hash=combined_protocol_hash(hashes),
         input_hashes=dict(hashes), measurements=report,
     ))
     return report
+
+
+def run_heldout_phase(
+    args: argparse.Namespace,
+    run_dir: Path,
+    config: Mapping[str, Any],
+    hashes: dict[str, str],
+) -> dict[str, Any]:
+    phase = "heldout"
+    answers, split = _load_campaign_inputs(run_dir, hashes)
+    _load_pre_discovery_smoke_hash(run_dir, hashes)
+    _load_discovery_hashes(run_dir, hashes)
+    frozen = _load_and_validate_frozen_protocol(run_dir, config, split, hashes)
+    _load_post_freeze_smoke_hash(run_dir, hashes)
+    assert_phase_prerequisites(
+        run_dir,
+        phase,
+        protocol_hash=combined_protocol_hash(hashes),
+        required_input_hashes=hashes,
+    )
+    _, tokenizer, lens_model, lens, adapter, runtime = load_runtime(args, config)
+    write_manifest(
+        run_dir,
+        phase=phase,
+        status="running",
+        config=config,
+        hashes=hashes,
+        runtime=runtime,
+    )
+    heldout_ids = [str(value) for value in split["heldout_item_ids"]]
+    discovery_ids = {str(value) for value in split["discovery_item_ids"]}
+    if not heldout_ids or discovery_ids.intersection(heldout_ids):
+        raise AssertionError("held-out split is empty or overlaps discovery")
+    by_id = {str(record["item_id"]): record for record in answers}
+    if any(
+        item_id not in by_id or bool(by_id[item_id].get("invalid"))
+        for item_id in heldout_ids
+    ):
+        raise AssertionError("held-out split contains a missing or invalid answer")
+
+    heldout_dir = run_dir / phase
+    trials_path = heldout_dir / "trials.jsonl"
+    if trials_path.exists() and trials_path.stat().st_size:
+        raise RuntimeError("held-out trials already contain data; start a new campaign")
+    records: list[dict[str, Any]] = []
+    for item_id in heldout_ids:
+        append_jsonl(run_dir / "events.jsonl", {
+            "timestamp": utc_now(),
+            "event_type": "heldout_trial_started",
+            "item_id": item_id,
+        })
+        record = run_smoke_item(
+            adapter,
+            lens_model,
+            lens,
+            tokenizer,
+            by_id[item_id],
+            config,
+            phase=phase,
+            frozen_protocol=frozen,
+        )
+        records.append(record)
+        append_jsonl(trials_path, record)
+        _log_smoke_record(run_dir, record)
+        logging.getLogger("process_sensitive_replay").info(
+            "held-out replay item=%s completed=%d/%d",
+            item_id,
+            len(records),
+            len(heldout_ids),
+        )
+
+    summarize_smoke(records, config, phase=phase)
+    if [str(record["item_id"]) for record in records] != heldout_ids:
+        raise AssertionError("held-out execution order or coverage changed")
+    trial_summary_path = heldout_dir / "trial_summary.csv"
+    candidate_scores_path = heldout_dir / "candidate_scores.csv"
+    _write_trial_summary(heldout_dir, records)
+    _write_candidate_scores(heldout_dir, records)
+    support_rows = heldout_support_rows(records, config)
+    support_path = run_dir / "heldout_support_match.csv"
+    _write_rows_csv(support_path, support_rows)
+    matching = support_match_summary(
+        [
+            (
+                float(record["support"]["targeted_drop"]),
+                float(record["support"]["alternative_drop"]),
+            )
+            for record in records
+        ],
+        config,
+    )
+    support_summary_path = heldout_dir / "support_match_summary.json"
+    support_summary_path.write_text(
+        json.dumps(matching, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    support_plot_path = generate_support_match_plot(
+        support_rows, heldout_dir / "support_match_diagnostic.png"
+    )
+    hashes.update({
+        "heldout_trials": sha256_file(trials_path),
+        "heldout_trial_summary": sha256_file(trial_summary_path),
+        "heldout_candidate_scores": sha256_file(candidate_scores_path),
+        "heldout_support_match": sha256_file(support_path),
+        "heldout_support_match_summary": sha256_file(support_summary_path),
+        "heldout_support_match_plot": sha256_file(support_plot_path),
+    })
+    if not matching["passed"]:
+        raise RuntimeError("support_match_gate_failed on held-out data")
+
+    effect_rows = heldout_effect_rows(records, frozen, config)
+    effects_path = run_dir / "heldout_effects.csv"
+    _write_rows_csv(effects_path, effect_rows)
+    hashes["heldout_effects"] = sha256_file(effects_path)
+    measurements = {
+        "heldout_items": len(records),
+        "discovery_items_accessed": 0,
+        "candidate_count": len(frozen["candidates"]),
+        "support_matching": matching,
+        "critical_checks_per_item": True,
+        "process_hook_disabled_during_turn3": True,
+    }
+    write_gate(run_dir, GateStatus(
+        phase=phase,
+        status="passed",
+        protocol_hash=combined_protocol_hash(hashes),
+        input_hashes=dict(hashes),
+        measurements=measurements,
+    ))
+    return measurements
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        return [dict(row) for row in csv.DictReader(handle)]
+
+
+def _markdown_number(value: Any) -> str:
+    if value is None:
+        return "NA"
+    return f"{float(value):.6g}"
+
+
+def _markdown_interval(values: Any) -> str:
+    if not isinstance(values, (list, tuple)) or len(values) != 2:
+        return "NA"
+    return f"[{_markdown_number(values[0])}, {_markdown_number(values[1])}]"
+
+
+def render_results_markdown(
+    candidate_statistics: Sequence[Mapping[str, Any]],
+    support_summary: Mapping[str, Any],
+    *,
+    heldout_items: int,
+) -> str:
+    lines = [
+        "# Process-sensitive replay held-out results",
+        "",
+        f"Held-out items: {heldout_items}",
+        "",
+        (
+            "Support-match gate: **PASSED** "
+            f"({support_summary['matched_items']}/{support_summary['valid_items']}, "
+            f"{float(support_summary['item_match_fraction']):.1%})."
+        ),
+        "",
+        "## Interpretation status",
+        "",
+        (
+            "These are descriptive held-out estimates. The frozen protocol does not "
+            "contain a numerical held-out convergence decision threshold, so this "
+            "report does **not** automatically classify any candidate as "
+            "process-sensitive or M(P)-like."
+        ),
+        "",
+        (
+            "The experiment does not test candidate-to-judgment/control causal "
+            "mediation and cannot prove a higher-order representation."
+        ),
+        "",
+        "## H1–H7 and control contrasts",
+        "",
+    ]
+    for statistic in candidate_statistics:
+        label = (
+            str(statistic["candidate_label"])
+            .replace("|", "\\|")
+            .replace("`", "\\`")
+        )
+        lines.extend([
+            (
+                f"### Candidate {statistic['candidate_rank']}: `{label}` "
+                f"(token {statistic['candidate_token_id']}, "
+                f"layer {statistic['candidate_layer']}, branch {statistic['branch']})"
+            ),
+            "",
+            "| Test / contrast | Mean or estimate | Median | Item-bootstrap 95% CI |",
+            "|---|---:|---:|---:|",
+        ])
+        effect_rows = (
+            ("H1 targeted − clean", "h1_targeted_minus_clean"),
+            ("H2 alternative − clean", "h2_alternative_minus_clean"),
+            ("H3 targeted − alternative", "h3_targeted_minus_alternative"),
+            (
+                "H3 support-normalized targeted − alternative",
+                "h3_support_normalized_response_difference",
+            ),
+            ("H4 targeted − random", "h4_targeted_minus_random"),
+            ("H4 alternative − random", "h4_alternative_minus_random"),
+            ("H5 targeted preserved − reset", "h5_targeted_preserved_minus_reset"),
+        )
+        for row_label, key in effect_rows:
+            summary = statistic[key]
+            lines.append(
+                f"| {row_label} | {_markdown_number(summary['mean'])} | "
+                f"{_markdown_number(summary['median'])} | "
+                f"{_markdown_interval(summary['item_bootstrap_95_ci'])} |"
+            )
+        fixed = statistic["h3_item_fixed_effect_model"]
+        lines.append(
+            "| H3 item-FE mechanism term | "
+            f"{_markdown_number(fixed['beta_mechanism'])} | NA | "
+            f"{_markdown_interval(fixed['item_bootstrap_95_ci']['beta_mechanism'])} |"
+        )
+        h6 = statistic["h6_candidate_score_vs_support"]
+        lines.append(
+            f"| H6 candidate-score/support slope | {_markdown_number(h6['slope'])} "
+            f"| NA | {_markdown_interval(h6['item_bootstrap_95_ci']['slope'])} |"
+        )
+        h7 = statistic.get("h7_confidence_margin_vs_support")
+        if h7 is not None:
+            lines.append(
+                f"| H7 confidence-margin/support slope | {_markdown_number(h7['slope'])} "
+                f"| NA | {_markdown_interval(h7['item_bootstrap_95_ci']['slope'])} |"
+            )
+        else:
+            lines.append("| H7 confidence-margin/support slope | NA | NA | NA |")
+        lines.extend([
+            "",
+            (
+                "H3 item-FE support coefficient: "
+                f"`{_markdown_number(fixed['beta_support'])}`; absolute mechanism/shared-"
+                f"effect ratio: `{_markdown_number(fixed['abs_mechanism_to_shared_effect_ratio'])}`."
+            ),
+            (
+                "H6 correlations: Pearson "
+                f"`{_markdown_number(h6['pearson'])}`, Spearman "
+                f"`{_markdown_number(h6['spearman'])}`."
+            ),
+            (
+                "H7 correlations: NA for this branch."
+                if h7 is None
+                else (
+                    "H7 correlations: Pearson "
+                    f"`{_markdown_number(h7['pearson'])}`, Spearman "
+                    f"`{_markdown_number(h7['spearman'])}`."
+                )
+            ),
+            "",
+        ])
+    lines.extend([
+        "Exact machine-readable statistics and plot hashes are in "
+        "`analysis_report.json` and `plot_manifest.json`.",
+        "",
+    ])
+    return "\n".join(lines)
+
+
+def run_analyze_phase(
+    run_dir: Path,
+    config: Mapping[str, Any],
+    hashes: dict[str, str],
+) -> dict[str, Any]:
+    phase = "analyze"
+    _answers, split = _load_campaign_inputs(run_dir, hashes)
+    _load_pre_discovery_smoke_hash(run_dir, hashes)
+    _load_discovery_hashes(run_dir, hashes)
+    frozen = _load_and_validate_frozen_protocol(run_dir, config, split, hashes)
+    _load_post_freeze_smoke_hash(run_dir, hashes)
+    _load_heldout_hashes(run_dir, hashes)
+    assert_phase_prerequisites(
+        run_dir,
+        phase,
+        protocol_hash=combined_protocol_hash(hashes),
+        required_input_hashes=hashes,
+    )
+    heldout_ids = {str(value) for value in split["heldout_item_ids"]}
+    effect_rows: list[dict[str, Any]] = _read_csv_rows(run_dir / "heldout_effects.csv")
+    support_rows: list[dict[str, Any]] = _read_csv_rows(
+        run_dir / "heldout_support_match.csv"
+    )
+    candidate_score_rows: list[dict[str, Any]] = _read_csv_rows(
+        run_dir / "heldout" / "candidate_scores.csv"
+    )
+    if {str(row["item_id"]) for row in effect_rows} != heldout_ids:
+        raise AssertionError("analysis effect table does not exactly cover held-out IDs")
+    if {str(row["item_id"]) for row in support_rows} != heldout_ids:
+        raise AssertionError("analysis support table does not exactly cover held-out IDs")
+    for row in support_rows:
+        row["support_matched"] = str(row["support_matched"]).lower() == "true"
+        row["targeted_drop_positive"] = (
+            str(row["targeted_drop_positive"]).lower() == "true"
+        )
+    support_summary = json.loads(
+        (run_dir / "heldout" / "support_match_summary.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if support_summary.get("passed") is not True:
+        raise RuntimeError("support_match_gate_failed: analysis refused invalid held-out data")
+    candidate_statistics = json_safe(analyze_candidate_effects(effect_rows))
+    if not candidate_statistics:
+        raise RuntimeError("analysis produced no frozen-candidate statistics")
+    analysis_dir = run_dir / phase
+    plot_paths = generate_required_plots(
+        effect_rows,
+        support_rows,
+        candidate_score_rows,
+        analysis_dir / "plots",
+        primary_branch=str(config["candidate_selection"]["primary_branch"]),
+        generic_token_ids=config["readout"]["generic_evaluator_token_ids"],
+    )
+    plot_hashes = {
+        str(path.relative_to(run_dir)): sha256_file(path) for path in plot_paths
+    }
+    plot_manifest_path = analysis_dir / "plot_manifest.json"
+    plot_manifest_path.write_text(
+        json.dumps(plot_hashes, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    report = {
+        "schema_version": 1,
+        "heldout_items": len(heldout_ids),
+        "support_matching": support_summary,
+        "candidate_statistics": candidate_statistics,
+        "plots": sorted(plot_hashes),
+        "interpretation": {
+            "maximum_claim": config["interpretation"]["maximum_claim"],
+            "prohibited_claim": config["interpretation"]["prohibited_claim"],
+            "causal_mediation_tested": False,
+            "automatic_candidate_classification": False,
+            "classification_reason": (
+                "no explicitly frozen held-out convergence decision threshold"
+            ),
+        },
+    }
+    report_path = analysis_dir / "analysis_report.json"
+    report_path.write_text(
+        json.dumps(
+            report,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            allow_nan=False,
+        ) + "\n",
+        encoding="utf-8",
+    )
+    markdown_path = analysis_dir / "RESULTS.md"
+    markdown_path.write_text(
+        render_results_markdown(
+            candidate_statistics,
+            support_summary,
+            heldout_items=len(heldout_ids),
+        ),
+        encoding="utf-8",
+    )
+    hashes.update({
+        "analysis_report": sha256_file(report_path),
+        "analysis_plot_manifest": sha256_file(plot_manifest_path),
+        "analysis_results_markdown": sha256_file(markdown_path),
+    })
+    measurements = {
+        "heldout_items": len(heldout_ids),
+        "candidate_statistics": len(candidate_statistics),
+        "plot_count": len(plot_paths),
+        "support_matching": support_summary,
+        "interpretation_ceiling_enforced": True,
+    }
+    write_gate(run_dir, GateStatus(
+        phase=phase,
+        status="passed",
+        protocol_hash=combined_protocol_hash(hashes),
+        input_hashes=dict(hashes),
+        measurements=measurements,
+    ))
+    return measurements
 
 
 def invalid_status(exc: BaseException) -> str:
@@ -1120,6 +1755,7 @@ def invalid_status(exc: BaseException) -> str:
     if any(term in message for term in (
         "cache", "state", "storage", "branch", "hook", "gradient", "logit parity",
         "turn-3", "prefix-suffix", "factual prefix", "transcript token parity",
+        "non-finite", "j-lens", "replay produced",
     )):
         return "invalid_cache_state"
     return "failed"
@@ -1159,6 +1795,10 @@ def main(argv: list[str] | None = None) -> int:
             result = run_discovery_phase(args, run_dir, config, hashes)
         elif args.phase == "freeze":
             result = run_freeze_phase(run_dir, config, hashes)
+        elif args.phase == "heldout":
+            result = run_heldout_phase(args, run_dir, config, hashes)
+        elif args.phase == "analyze":
+            result = run_analyze_phase(run_dir, config, hashes)
         else:
             result = run_smoke_phase(args, run_dir, config, hashes)
         write_manifest(run_dir, phase=args.phase, status="passed", config=config, hashes=hashes)
@@ -1166,14 +1806,19 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, indent=2, default=str))
         return 0
     except Exception as exc:
-        status = invalid_status(exc)
+        status = (
+            exc.status if isinstance(exc, PhaseGateFailure) else invalid_status(exc)
+        )
+        measurements = (
+            exc.measurements if isinstance(exc, PhaseGateFailure) else {}
+        )
         append_jsonl(run_dir / "errors.jsonl", {
             "timestamp": utc_now(), "phase": args.phase,
             "status": status, "error_type": type(exc).__name__, "message": str(exc),
         })
         write_gate(run_dir, GateStatus(
             phase=args.phase, status=status, protocol_hash=protocol_hash,
-            input_hashes=dict(hashes), measurements={}, reason=str(exc),
+            input_hashes=dict(hashes), measurements=measurements, reason=str(exc),
         ))
         write_manifest(run_dir, phase=args.phase, status=status, config=config, hashes=hashes)
         logger.error("phase=%s status=%s: %s", args.phase, status, exc)

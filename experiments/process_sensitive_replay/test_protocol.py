@@ -155,13 +155,13 @@ class DiscoveryTests(unittest.TestCase):
             AlphaTrial(alpha, tuple([drop] * 16))
             for alpha, drop in zip(
                 self.config["strengths"]["alpha_grid"],
-                (0.1, 0.8, 1.5, 2.5, 4.5),
+                (0.1, 0.3, 0.7, 1.0, 2.2, 3.0, 4.0, 5.0),
                 strict=True,
             )
         ]
         selected = select_alpha_strengths(trials, self.config)
-        self.assertEqual(selected["weak_alpha"], 0.02)
-        self.assertEqual(selected["strong_alpha"], 0.1)
+        self.assertEqual(selected["weak_alpha"], 0.1)
+        self.assertEqual(selected["strong_alpha"], 0.11)
 
     def test_beta_selection_minimizes_mismatch_subject_to_all_gates(self) -> None:
         trials = []

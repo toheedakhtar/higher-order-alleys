@@ -141,6 +141,25 @@ class AnswerBankTests(unittest.TestCase):
         self.assertEqual(record["canonical_turn_end_token_ids"], [tokenizer.im_end_id])
         self.assertEqual(record["post_answer_token_ids"][-1], tokenizer.im_end_id)
         self.assertFalse(record["generation"]["terminal_was_already_canonical"])
+        self.assertTrue(record["canonical_transcript_exact"])
+        self.assertTrue(record["completed_template_exact"])
+
+    def test_completed_template_must_match_exactly_not_only_by_prefix(self) -> None:
+        class ExtraTrailingTokenTokenizer(TinyChatTokenizer):
+            def apply_chat_template(self, messages, **kwargs):
+                rendered = super().apply_chat_template(messages, **kwargs)
+                if not kwargs.get("add_generation_prompt", True):
+                    rendered += "X"
+                return rendered
+
+        tokenizer = ExtraTrailingTokenTokenizer()
+        content = tokenizer("AB", add_special_tokens=False)["input_ids"]
+        adapter = self.adapter(tokenizer, [*content, tokenizer.endoftext_id])
+        record = discover_answer(adapter, tokenizer, self.row, max_answer_tokens=256)
+        self.assertTrue(record["invalid"])
+        self.assertTrue(record["canonical_transcript_exact"])
+        self.assertFalse(record["completed_template_exact"])
+        self.assertTrue(record["invalid_reasons"]["chat_reconstruction_unstable"])
 
     def test_cap_without_termination_is_invalid_and_not_canonicalized(self) -> None:
         tokenizer = TinyChatTokenizer()

@@ -3,7 +3,8 @@
   "scientific_protocol": "docs/PROCESS_SENSITIVE_REPLAY_IMPLEMENTATION_PLAN.md",
   "model": {
     "id": "Qwen/Qwen3.6-27B",
-    "revision": "main",
+    "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "tokenizer_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
     "dtype": "bfloat16",
     "device_map": "cuda"
   },
@@ -11,6 +12,7 @@
     "repo": "neuronpedia/jacobian-lens",
     "file": "qwen3.6-27b/jlens/Salesforce-wikitext/Qwen3.6-27B_jacobian_lens_n1000.pt",
     "revision": "0731326edff4ae730ffc5356fe1a4728c748b3a6",
+    "sha256": "1718c8c52dd8a9dad03738d4d625937c1fbba10be325b872ed446c7290fc11e1",
     "resident_jacobians": true
   },
   "dataset": {
@@ -44,7 +46,7 @@
     "heldout_items": 66
   },
   "strengths": {
-    "alpha_grid": [0.01, 0.02, 0.05, 0.1, 0.2],
+    "alpha_grid": [0.01, 0.02, 0.05, 0.1, 0.11, 0.125, 0.15, 0.2],
     "beta_grid": [0.05, 0.1, 0.2, 0.4, 0.8],
     "weak_min_median_drop_nat": 0.75,
     "weak_min_positive_items": 12,

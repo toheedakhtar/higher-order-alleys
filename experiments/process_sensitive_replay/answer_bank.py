@@ -13,9 +13,11 @@ from experiments.higher_v_readout_global.protocol import (
 
 from .protocol import direct_factual_question, hash_token_ids
 from .replay import (
+    CANONICAL_ASSISTANT_TURN_TERMINATOR,
     QwenReplayAdapter,
     canonical_assistant_turn_end_ids,
     encode_chat,
+    encode_rendered,
     eos_token_ids,
 )
 
@@ -75,7 +77,7 @@ def discover_answer(
     # Preserve answer-content IDs exactly. Only the invisible assistant-turn
     # delimiter is normalized to the chat template's canonical <|im_end|>.
     post_answer_ids = [*prefix_ids, *content_ids, *canonical_turn_end_ids]
-    _, rendered_turn_ids = encode_chat(
+    rendered_turn, rendered_turn_ids = encode_chat(
         tokenizer,
         [
             {"role": "user", "content": question},
@@ -83,12 +85,35 @@ def discover_answer(
         ],
         add_generation_prompt=False,
     )
-    rendered_prefix_stable = rendered_turn_ids[: len(post_answer_ids)] == post_answer_ids
+    canonical_factual_rendered = (
+        rendered + answer + CANONICAL_ASSISTANT_TURN_TERMINATOR
+    )
+    canonical_factual_ids = [
+        int(value)
+        for value in encode_rendered(tokenizer, canonical_factual_rendered)[
+            "input_ids"
+        ][0].tolist()
+    ]
+    separator_ids = [
+        int(value)
+        for value in encode_rendered(tokenizer, "\n")["input_ids"][0].tolist()
+    ]
+    canonical_transcript_exact = (
+        terminated and canonical_factual_ids == post_answer_ids
+    )
+    completed_template_exact = (
+        terminated
+        and rendered_turn == canonical_factual_rendered + "\n"
+        and rendered_turn_ids == [*post_answer_ids, *separator_ids]
+    )
+    chat_reconstruction_exact = (
+        canonical_transcript_exact and completed_template_exact
+    )
     invalid = (
         not terminated
         or not content_ids
         or not stable
-        or not rendered_prefix_stable
+        or not chat_reconstruction_exact
         or is_invalid_factual_response(str(row["item_type"]), answer)
     )
     scoring = score_factual_answer(answer, str(row["answer_key"]))
@@ -107,7 +132,7 @@ def discover_answer(
             "reached_token_cap_without_valid_turn_termination": not terminated,
             "empty_answer": not content_ids,
             "decode_retokenize_unstable": not stable,
-            "chat_reconstruction_unstable": not rendered_prefix_stable,
+            "chat_reconstruction_unstable": not chat_reconstruction_exact,
             "malformed_factual_answer": is_invalid_factual_response(str(row["item_type"]), answer),
         },
         "question_rendered": rendered,
@@ -119,6 +144,10 @@ def discover_answer(
         "generated_turn_end_token_hash": hash_token_ids(original_terminal_ids),
         "canonical_turn_end_token_hash": hash_token_ids(canonical_turn_end_ids),
         "post_answer_token_ids": post_answer_ids,
+        "canonical_factual_rendered": canonical_factual_rendered,
+        "canonical_transcript_exact": canonical_transcript_exact,
+        "completed_template_exact": completed_template_exact,
+        "completed_template_separator_token_ids": separator_ids,
         "question_token_hash": hash_token_ids(prefix_ids),
         "answer_token_hash": hash_token_ids(content_ids),
         "transcript_hash": hash_token_ids(post_answer_ids),

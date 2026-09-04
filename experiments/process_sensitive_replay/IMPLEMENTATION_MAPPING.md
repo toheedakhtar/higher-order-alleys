@@ -5,6 +5,8 @@ It is not a modification of the frozen scientific protocol.
 
 ## Qwen3.6-27B
 
+- Model and tokenizer revision:
+  `6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`.
 - Runtime architecture: `Qwen3_5ForConditionalGeneration`.
 - Text decoder used by J-Lens: `model.language_model`.
 - Decoder shape: 64 blocks, residual width 5120.
@@ -29,6 +31,8 @@ digests while at least one layer 32–63 must change. That is enforced directly.
 
 - Installed package: `jlens==0.1.0`, repository commit
   `581d398613e5602a5af361e1c34d3a92ea82ba8e`.
+- Checkpoint repository revision: `0731326edff4ae730ffc5356fe1a4728c748b3a6`;
+  file SHA-256: `1718c8c52dd8a9dad03738d4d625937c1fbba10be325b872ed446c7290fc11e1`.
 - The fitted checkpoint used in prior runs contains source layers 0–62, so
   required readout layers 36–44 are available.
 - `HFLensModel.forward()` forces `use_cache=False`; it is not used for cached
@@ -49,6 +53,15 @@ digests while at least one layer 32–63 must change. That is enforced directly.
 5. Re-run all critical checks after discovery freezes alpha, beta, and
    candidates.
 6. Permit held-out execution only after the post-freeze smoke gate passes.
+7. Execute held-out replay with frozen strengths/candidates, enforce aggregate
+   and item-level support matching fail-closed, and retain item-level matching
+   diagnostics even when the campaign is invalid.
+8. Run model-free H1-H7 statistics and required plotting only after a valid
+   held-out gate, with the process-sensitive/M(P)-like interpretation ceiling.
+
+The `psr-v7` amendment adds alpha points `0.11`, `0.125`, and `0.15` between
+the `psr-v6` weak point and overshooting `0.20` point. No selector, threshold,
+fallback, split, prompt, intervention, or held-out rule changed.
 
 Discovery and freeze are now executable. Discovery performs the complete
 16-item alpha grid and freezes weak/strong alpha before beginning the separate
@@ -79,6 +92,24 @@ next phase.
   the chat template's one-token `<|im_end|>` delimiter.
 - An item that reaches the cap without a valid terminator is diagnostic-only
   and is excluded from both discovery and held-out splits.
+- The stored factual rendering must tokenize exactly to `post_answer_token_ids`.
+  The completed Qwen template must equal that rendering plus exactly one
+  newline separator, which remains part of the later Turn-3 suffix.
+
+## Integrity hardening
+
+- Model/tokenizer commits, J-Lens revision/checksum, and runtime package
+  versions participate in every gate's base identity hash.
+- Hybrid-cache validation requires true convolution and recurrent
+  initialization flags for every recurrent state slot.
+- Clean-reset and targeted-reset branches receive symmetric Turn-3 cache,
+  logit, margin, residual, and J-Lens parity checks.
+- A post-freeze support-match failure writes phase-local `trials.jsonl`, the
+  aggregate smoke report, and per-item support diagnostics before returning a
+  nonzero status and withholding the success marker.
+- Held-out reporting includes both structured-minus-random contrasts and is
+  descriptive only; no candidate is automatically classified without an
+  approved frozen convergence decision rule.
 
 ## Recurrent gradient compatibility correction
 

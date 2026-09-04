@@ -35,6 +35,17 @@ Existing factual extraction, regex scoring, normalization, tokenizer alignment, 
 
 The specification says `datasets/MMB/metacognition.csv`; the actual validated repository path is `dataset/metacognition.csv`, which will be used and content-hashed.
 
+The model and tokenizer are pinned to resolved commit
+`6a9e13bd6fc8f0983b9b99948120bc37f49c13e9`. The J-Lens checkpoint is pinned
+to repository commit `0731326edff4ae730ffc5356fe1a4728c748b3a6` and file
+SHA-256 `1718c8c52dd8a9dad03738d4d625937c1fbba10be325b872ed446c7290fc11e1`.
+Those identities and the installed Torch, Transformers, J-Lens, and
+Hugging Face Hub versions are part of every phase's base protocol hash and
+gate inputs. A change makes prior gates stale and fails closed.
+Accordingly, the real campaign's `validate` phase and all subsequent phases
+must run in the same unchanged CUDA software environment; CPU validation is a
+separate disposable engineering check and cannot seed the CUDA campaign.
+
 ## Exact causal flow
 
 ```text
@@ -79,7 +90,7 @@ Step 0 will use greedy decoding with `enable_thinking=False` and a hard maximum 
 
 The answer bank will save both the generated token IDs and decoded text. Generated answer-content token IDs are immutable. A model-produced valid terminal token is logged as the original terminal ID, but the invisible assistant-turn delimiter in the canonical replay transcript is normalized to the single `<|im_end|>` token emitted by the completed chat template. The original and canonical terminal IDs, whether they were already identical, and their hashes remain logged. This normalization never changes answer text or answer-content IDs.
 
-The full chat-template rendering will then be reconstructed and checked to ensure the answer content re-tokenizes to the same IDs and the canonical post-answer transcript matches the rendered conversation. If generation reaches the 256-token cap without any configured valid turn terminator, the truncated content is retained only in raw diagnostics: the item is marked invalid, receives no canonical turn terminator, and is excluded from both discovery and held-out evaluation rather than being treated as canonical X.
+The full chat-template rendering will then be reconstructed and checked to ensure the answer content re-tokenizes to the same IDs and the canonical post-answer transcript matches exactly. Because Qwen's completed-turn template places one newline after `<|im_end|>` while the frozen factual state intentionally stops at `<|im_end|>`, the completed template must equal the canonical stored factual rendering plus exactly that one independently tokenized suffix separator; arbitrary trailing tokens are forbidden. If generation reaches the 256-token cap without any configured valid turn terminator, the truncated content is retained only in raw diagnostics: the item is marked invalid, receives no canonical turn terminator, and is excluded from both discovery and held-out evaluation rather than being treated as canonical X.
 
 If decoding and re-tokenization are not stable:
 
@@ -270,8 +281,15 @@ The discovery loader will reject held-out IDs. The held-out runner will refuse t
 Only the 16 discovery items will test:
 
 ```text
-alpha = 0.01, 0.02, 0.05, 0.10, 0.20
+alpha = 0.01, 0.02, 0.05, 0.10, 0.11, 0.125, 0.15, 0.20
 ```
+
+This is the declared `psr-v7` grid. The `psr-v6` discovery diagnostic placed
+the weak point at `0.10`, found no point in the strong target range, and
+overshot it at `0.20`; the added intermediate points resolve the grid's
+measurement gap. All weak/strong thresholds, fallback behavior, and
+fail-closed rules remain unchanged. `psr-v6` remains a failed diagnostic and
+none of its measurements are imported into `psr-v7`.
 
 Proposed deterministic selection rule:
 
@@ -418,7 +436,7 @@ For each frozen candidate, the 66-item analysis will test:
 - H1: oriented targeted-strong minus clean effect.
 - H2: oriented support-matched-alternative minus clean effect in the same direction as H1.
 - H3: targeted-strong and support-matched-alternative produce similar candidate responses after accounting for their realized support drops.
-- H4: targeted-strong minus random effect.
+- H4: targeted-strong minus random and support-matched-alternative minus random effects.
 - H5: oriented targeted-preserved minus reset effect.
 - H6: item-centered candidate-score slope against support drop.
 - H7: item-centered confidence-margin slope against support drop.
@@ -541,10 +559,10 @@ Three gate families are causally critical:
    - Post-freeze critical smoke halts immediately if the frozen alternative strength fails its support-match assertion.
    - Held-out evaluation never retunes the strength. Once the paired held-out support data are complete, the aggregate and item-level criteria above are evaluated. Failure sets campaign status to `invalid_support_match`.
 2. **Reset-parity gate**
-   - `clean_preserved` and independently reconstructed `clean_reset` must have identical transcript/token hashes and cache topology, and must agree within frozen absolute/relative numerical tolerances for answer support, post-answer state, Turn-3 logits, confidence/correctness margins, and candidate readouts.
+   - `clean_preserved`, independently reconstructed `clean_reset`, and `targeted_strong_reset` after its perturbed state is discarded must have identical transcript/token hashes and cache topology, and must agree within frozen absolute/relative numerical tolerances for answer support/post-answer state and symmetrically for Turn-3 cache state, logits, confidence/correctness margins, residuals, and candidate readouts.
    - This is mandatory in both smoke phases and on the predeclared periodic held-out integrity items. Any failure halts the active phase and sets campaign status to `invalid_reset_parity`.
 3. **Cache/state-integrity gate**
-   - The perturbation must produce a persistent downstream state difference before Turn 3; all expected Qwen hybrid-state components must exist with valid shapes, positions, layer types, and finite values.
+   - The perturbation must produce a persistent downstream state difference before Turn 3; all expected Qwen hybrid-state components must exist with valid shapes, positions, layer types, finite values, and true `is_conv_states_initialized` / `is_recurrent_states_initialized` flags for every recurrent state slot.
    - Condition and meta-branch states must be deep, storage-disjoint clones. Hashes of every source state must remain unchanged after any sibling branch runs. The factual-process hook invocation count must be zero during Turn 3.
    - Turn 3 must be suffix-only: the frozen factual history may not be rerendered. Exact prefix, suffix, boundary, and final concatenated-transcript token/hash parity is mandatory across conditions, and any invalid chat boundary fails closed.
    - These assertions execute per item and condition. Any failure immediately halts the active phase and sets campaign status to `invalid_cache_state`.
@@ -619,11 +637,17 @@ The pre-discovery engineering smoke must prove all applicable infrastructure pro
   passes exact boundary/final transcript hash parity across conditions;
 - no factual-process hook fires during either meta branch.
 
-The smoke reports must show per-position targeted, random, and alternative norms; targeted/alternative gradient cosine; support mismatch when a frozen beta exists; reset-parity measurements; hybrid-state digests; and factual-prefix, Turn-3 suffix, prefix-suffix boundary, and final concatenated-transcript hashes. A support-match failure in post-freeze smoke, or a reset-parity, orthogonality, state-preservation, suffix-integrity, branch-isolation, or hook-lifetime failure in either smoke phase, is critical and stops the run. The runner must return a nonzero exit status and must not write a phase-success marker. Discovery may start only after pre-discovery engineering smoke passes. Held-out may start only after post-freeze critical smoke passes fail-closed.
+The smoke reports must show per-position targeted, random, and alternative norms; targeted/alternative gradient cosine; support mismatch when a frozen beta exists; reset-parity measurements; hybrid-state digests; and factual-prefix, Turn-3 suffix, prefix-suffix boundary, and final concatenated-transcript hashes. A failed post-freeze support-match gate must first write its phase-local full trial log, aggregate report, and item-level matching measurements, then halt without a success marker. A support-match failure in post-freeze smoke, or a reset-parity, orthogonality, state-preservation, suffix-integrity, branch-isolation, or hook-lifetime failure in either smoke phase, is critical and stops the run. The runner must return a nonzero exit status and must not write a phase-success marker. Discovery may start only after pre-discovery engineering smoke passes. Held-out may start only after post-freeze critical smoke passes fail-closed.
 
 ## Results interpretation
 
 The reporting layer will distinguish gate-invalid diagnostics from valid-campaign conclusions. If any critical gate fails, the campaign is marked invalid and only the corresponding diagnostic report is emitted. The substantive outcomes below are considered only when the support-match, reset-parity, and cache/state-integrity gates all pass:
+
+The held-out report will present H1–H7 and all targeted/alternative/random/reset
+contrasts descriptively. Because this protocol does not freeze a numerical
+held-out convergence decision threshold, it will not automatically classify a
+candidate as process-sensitive or `M(P)`-like. Such classification requires an
+explicitly approved and frozen decision rule; none is introduced here.
 
 1. **No later effect beyond random:** evidence favors ordinary first-order/readout behavior for the tested mechanism.
 2. **Targeted and random produce similar later effects:** evidence favors generic hidden-state contamination or causal persistence.

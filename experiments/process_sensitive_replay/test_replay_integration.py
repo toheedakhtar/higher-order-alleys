@@ -135,6 +135,57 @@ class ActualQwenReplayIntegrationTests(unittest.TestCase):
                     process_layer=3,
                 )
 
+    def test_targeted_gradient_sign_matches_finite_difference(self) -> None:
+        post_answer = [1, 2, 3, 4, 5, 6]
+        question_prefix = [1, 2, 3]
+        answer = [4, 5]
+        bundle = compute_clean_gradients(
+            self.adapter,
+            post_answer,
+            prefix_length=len(question_prefix),
+            answer_token_ids=answer,
+            process_layer=3,
+        )
+        clean = replay_teacher_forced(
+            self.adapter,
+            post_answer_token_ids=post_answer,
+            question_prefix_token_ids=question_prefix,
+            answer_token_ids=answer,
+        )
+        epsilon = 1e-3
+        specs = build_interventions(
+            bundle,
+            family="targeted",
+            strength=epsilon,
+            campaign_seed=42,
+            item_id="finite-difference",
+            max_abs_cosine=0.1,
+        )
+        targeted = replay_teacher_forced(
+            self.adapter,
+            post_answer_token_ids=post_answer,
+            question_prefix_token_ids=question_prefix,
+            answer_token_ids=answer,
+            intervention=InterventionSchedule(process_layer=3, positions=specs),
+        )
+        predicted_derivative = -sum(
+            float(
+                bundle.clean_residual_norms[index]
+                * torch.linalg.vector_norm(bundle.answer_gradients[index])
+            )
+            for index in range(len(answer))
+        )
+        observed_derivative = (
+            targeted.answer_sequence_logp - clean.answer_sequence_logp
+        ) / epsilon
+        self.assertLess(predicted_derivative, 0)
+        self.assertLess(observed_derivative, 0)
+        self.assertAlmostEqual(
+            observed_derivative / predicted_derivative,
+            1.0,
+            delta=0.02,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
