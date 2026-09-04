@@ -326,10 +326,15 @@ def load_runtime(
             raise RuntimeError(f"J-Lens checkpoint lacks required layers {missing}")
         if lens.d_model != lens_model.d_model:
             raise RuntimeError("J-Lens/model residual widths differ")
+    resident_jacobian_layers: list[int] = []
     if lens is not None and config["lens"].get("resident_jacobians", True):
-        for layer in lens.source_layers:
+        # Keep only Jacobians used by this resolved profile resident on CUDA.
+        # Quick mode requests 38/40/42, so moving all nine fitted layers would
+        # spend device memory and PCIe time without contributing a measurement.
+        for layer in expected["readout"]:
             device = next(lens_model.layers[layer].parameters()).device
             lens.jacobians[layer] = lens.jacobians[layer].to(device)
+            resident_jacobian_layers.append(int(layer))
     expected_model_revision = str(config["model"]["revision"])
     expected_tokenizer_revision = str(config["model"]["tokenizer_revision"])
     model_revision = getattr(hf_model.config, "_commit_hash", None)
@@ -371,6 +376,9 @@ def load_runtime(
         "lens_path": None if lens_path is None else str(lens_path),
         "lens_revision": lens_revision,
         "lens_source_layers": None if lens is None else list(lens.source_layers),
+        "resident_jacobian_layers": (
+            None if lens is None else resident_jacobian_layers
+        ),
         "jlens_force_bos": False,
         "model_resolved_revision": model_revision,
         # AutoTokenizer does not consistently expose _commit_hash. The exact
@@ -1407,6 +1415,10 @@ def run_freeze_phase(
         "schema_version": 1,
         "experiment_name": "process_sensitive_replay",
         "execution_profile": profile_name(config),
+        "answer_support_objective": config["alternative"]["objective"],
+        "gradient_answer_token_limit": config.get("execution_profile", {}).get(
+            "gradient_answer_token_limit"
+        ),
         "frozen_at": utc_now(),
         "source_hashes": source_hashes,
         "discovery_item_ids": [str(value) for value in split["discovery_item_ids"]],
@@ -1464,10 +1476,37 @@ def run_smoke_phase(
         run_dir, phase, protocol_hash=combined_protocol_hash(hashes),
         required_input_hashes=hashes,
     )
-    _, tokenizer, lens_model, lens, adapter, runtime = load_runtime(args, config)
-    write_manifest(run_dir, phase=phase, status="running", config=config, hashes=hashes, runtime=runtime)
     by_id = {str(record["item_id"]): record for record in answers}
     item_ids = split["discovery_item_ids"][: int(config["smoke"]["item_count"])]
+    discovery_support_reference = None
+    if phase == "post_freeze_smoke":
+        assert frozen is not None
+        strength_records = read_jsonl(run_dir / "discovery" / "strength_grid.jsonl")
+        strength_by_id = {str(record["item_id"]): record for record in strength_records}
+        strong_alpha = str(float(frozen["strong_alpha"]))
+        alternative_layer = str(int(frozen["alternative_layer"]))
+        beta = str(float(frozen["beta"]))
+        discovery_support_reference = {}
+        for item_id in item_ids:
+            item_id = str(item_id)
+            try:
+                strength_record = strength_by_id[item_id]
+                targeted_drop = strength_record["alpha_grid"][strong_alpha]["support_drop"]
+                alternative_drop = strength_record["beta_grid"][alternative_layer][beta][
+                    "support_drop"
+                ]
+            except KeyError as error:
+                raise RuntimeError(
+                    "frozen post-freeze smoke reference is incomplete for "
+                    f"item={item_id}, alpha={strong_alpha}, "
+                    f"layer={alternative_layer}, beta={beta}"
+                ) from error
+            discovery_support_reference[item_id] = {
+                "targeted_drop": float(targeted_drop),
+                "alternative_drop": float(alternative_drop),
+            }
+    _, tokenizer, lens_model, lens, adapter, runtime = load_runtime(args, config)
+    write_manifest(run_dir, phase=phase, status="running", config=config, hashes=hashes, runtime=runtime)
     phase_dir = run_dir / phase
     phase_dir.mkdir(parents=True, exist_ok=True)
     trials_path = phase_dir / "trials.jsonl"
@@ -1506,7 +1545,12 @@ def run_smoke_phase(
         records.append(record)
         append_jsonl(trials_path, record)
         _log_smoke_record(run_dir, record)
-    report = summarize_smoke(records, config, phase=phase)
+    report = summarize_smoke(
+        records,
+        config,
+        phase=phase,
+        discovery_support_reference=discovery_support_reference,
+    )
     report_path = run_dir / phase / "smoke_report.json"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")

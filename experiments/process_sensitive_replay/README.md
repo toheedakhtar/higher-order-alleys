@@ -84,6 +84,12 @@ Its reports are watermarked accordingly and cannot be presented as a substitute
 for the full confirmatory campaign. A quick and full campaign must always use
 different fresh run directories.
 
+On a single GPU, keep the campaign serial. Multiple item workers would duplicate
+recurrent/autograd state and can recreate the OOM. Quick mode now moves only its
+configured readout-layer Jacobians (38/40/42) onto CUDA; full mode continues to
+make all nine configured readout layers resident. See the comparison guide for
+safe offline-cache and allocator settings.
+
 For a detailed side-by-side comparison and interpretation guide, see
 [`docs/PROCESS_SENSITIVE_REPLAY_QUICK_VS_FULL.md`](../../docs/PROCESS_SENSITIVE_REPLAY_QUICK_VS_FULL.md).
 
@@ -138,12 +144,14 @@ retains `alpha_grid.jsonl` / `alpha_grid_diagnostics.json` or
 `beta_grid.jsonl` / `beta_grid_diagnostics.json` for inspection without
 creating a success marker or permitting freeze.
 
-The post-freeze smoke reruns every critical check and additionally enforces
-support matching with the frozen beta. Any failed gate returns a nonzero exit
-status, removes/withholds the phase-success marker, and prevents the next
+The post-freeze smoke reruns every critical check with the frozen strengths and
+requires each smoke item's targeted and alternative support drops to reproduce
+the corresponding hash-bound discovery measurements within reset-parity
+tolerance. It still reports support matching for the smoke subset, but does not
+apply the held-out 65% population gate to that two- or four-item engineering
+sample. Any failed reproduction or critical mechanics gate returns a nonzero
+exit status, removes/withholds the phase-success marker, and prevents the next
 phase from starting.
-Support-match failures retain a phase-local full trial log and diagnostic
-report before halting.
 
 Held-out uses the frozen strengths and candidates without adaptation. It runs
 the token/cache/state/hook checks for every held-out item, writes item-level

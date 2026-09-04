@@ -46,6 +46,76 @@ class ExecutionProfileTests(unittest.TestCase):
         self.assertEqual(self.quick["layers"]["readout"], [38, 40, 42])
         self.assertNotEqual(campaign_hashes(self.full)["config"], campaign_hashes(self.quick)["config"])
 
+    def test_quick_profile_preserves_the_causal_and_validity_contract(self) -> None:
+        unchanged_sections = (
+            "model",
+            "lens",
+            "dataset",
+            "conditions",
+            "support_matching",
+            "reset_parity",
+            "gradient_replay",
+            "turn3_replay",
+            "meta_branches",
+            "generation",
+            "interpretation",
+            "cuda_memory",
+        )
+        for section in unchanged_sections:
+            with self.subTest(section=section):
+                self.assertEqual(self.quick[section], self.full[section])
+
+        self.assertEqual(
+            self.quick["alternative"]["objective"],
+            "first_32_answer_tokens_sequence_log_probability",
+        )
+        for key in (
+            "mechanism",
+            "selection_inputs",
+            "prohibited_selection_inputs",
+            "max_median_norm_ratio_to_targeted",
+            "random_max_abs_cosine_with_answer_gradient",
+        ):
+            with self.subTest(alternative_contract=key):
+                self.assertEqual(
+                    self.quick["alternative"][key], self.full["alternative"][key]
+                )
+
+        for key in (
+            "process",
+            "alternative_candidates",
+            "minimum_alternative_separation",
+            "meta_readout",
+            "expected_model_layers",
+            "expected_hidden_size",
+            "expected_process_layer_type",
+            "expected_alternative_layer_type",
+        ):
+            with self.subTest(layer_contract=key):
+                self.assertEqual(self.quick["layers"][key], self.full["layers"][key])
+
+        for key in (
+            "weak_min_median_drop_nat",
+            "strong_median_drop_range_nat",
+        ):
+            with self.subTest(strength_gate=key):
+                self.assertEqual(
+                    self.quick["strengths"][key], self.full["strengths"][key]
+                )
+
+        for key in (
+            "primary_branch",
+            "nontrivial_variance_epsilon",
+            "max_support_adjusted_divergence_ratio",
+            "dedup_max_abs_direction_cosine",
+            "rank_metrics",
+        ):
+            with self.subTest(candidate_contract=key):
+                self.assertEqual(
+                    self.quick["candidate_selection"][key],
+                    self.full["candidate_selection"][key],
+                )
+
     def test_quick_explicit_split_never_touches_unselected_items(self) -> None:
         selected = [*QUICK_DISCOVERY_ITEM_IDS, *QUICK_HELDOUT_ITEM_IDS]
         rows = [

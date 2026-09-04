@@ -106,6 +106,24 @@ held-out execution. The required order remains:
 4. post-freeze critical smoke with frozen strengths;
 5. held-out only after every critical post-freeze gate passes.
 
+The first completed quick discovery selected layer 23 / beta `0.20` across its
+eight discovery items: targeted median drop `1.44593` nat, alternative median
+drop `1.19838` nat, and median paired mismatch `0.39108` nat against the frozen
+`0.5`-nat tolerance. Its two-item post-freeze smoke then halted because one item
+matched (`14`) and one did not (`1`), so the generic `0.65` item-coverage rule
+evaluated `1/2 = 0.5` as failure. All 19 critical mechanics checks passed on both
+items. This was an orchestration/gate-scope defect, not evidence that discovery
+selection itself failed: a 65% population threshold becomes an accidental 100%
+requirement at sample size two.
+
+The post-freeze gate now compares each smoke result with the corresponding
+hash-bound discovery support measurement at the frozen alpha, layer, and beta.
+The subset match summary is retained as a diagnostic; discovery and held-out
+continue to enforce the scientific support-match criteria. Because code identity
+is protocol-bound and failed phase directories are append-only, the halted run
+cannot be promoted or resumed as valid under this correction; a fresh quick
+campaign is required.
+
 At the time of this record, there is no held-out evidence for a
 process-property/process-sensitive representation and no `M(P)`-like or
 higher-order representation claim.

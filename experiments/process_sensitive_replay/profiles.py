@@ -37,6 +37,9 @@ def resolve_execution_profile(
         "exploratory": True,
         "selected_item_ids": selected,
         "gradient_answer_token_limit": 32,
+        "estimand": (
+            "early_answer_process_first_32_tokens_with_complete_answer_state"
+        ),
         "claim_ceiling": "exploratory mechanistic evidence; not confirmatory",
     }
     config["split"] = {
@@ -61,6 +64,10 @@ def resolve_execution_profile(
         **config["layers"],
         "readout": [38, 40, 42],
     }
+    config["alternative"] = {
+        **config["alternative"],
+        "objective": "first_32_answer_tokens_sequence_log_probability",
+    }
     config["smoke"] = {**config["smoke"], "item_count": 2}
     config["readout"] = {**config["readout"], "top_k": 25}
     config["candidate_selection"] = {
@@ -77,4 +84,3 @@ def profile_name(config: Mapping[str, Any]) -> str:
 def gradient_answer_token_limit(config: Mapping[str, Any]) -> int | None:
     value = config.get("execution_profile", {}).get("gradient_answer_token_limit")
     return None if value is None else int(value)
-

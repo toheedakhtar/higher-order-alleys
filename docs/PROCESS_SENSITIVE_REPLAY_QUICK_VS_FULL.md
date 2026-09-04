@@ -45,7 +45,8 @@ power or confirmatory strength.
 | Complete perturbed state preserved into Turn 3 | Yes | Yes |
 | Correctness and confidence branches | Both | Both |
 | Seven causal conditions | All | All |
-| Support-match, reset, cache, token, and hook gates | All | All |
+| Discovery and held-out support-match gates | Full criteria | Same criteria, reduced samples |
+| Post-freeze support replay, reset, cache, token, and hook gates | All | All |
 | Intended interpretation | Confirmatory if every gate passes | Exploratory only |
 
 ## What remains identical
@@ -68,7 +69,7 @@ Both profiles retain:
    - `targeted_strong_reset`
 7. Norm-matched, same-layer random controls for both structured mechanisms.
 8. Exact transcript/token parity, hybrid-cache integrity, storage isolation,
-   hook-lifetime, reset-parity, and support-match gates.
+   hook-lifetime, reset-parity, and frozen-support reproduction gates.
 9. Discovery/held-out isolation and immutable, hash-bound phase transitions.
 10. Candidate discovery followed by held-out H1-H7 analysis.
 
@@ -148,6 +149,76 @@ Bootstrap intervals and correlations based on eight held-out items will be
 unstable. Effect direction, control separation, support matching, and item-level
 consistency should receive more weight than precise interval endpoints.
 
+## Single-GPU performance policy
+
+Use one experiment process and one CUDA worker. The phase dependency chain is
+serial, and concurrent item workers would each need independent recurrent cache
+and autograd state around the same 27B model. That raises peak memory and usually
+reduces throughput on one already-busy GPU.
+
+The safe single-GPU optimizations are therefore bounded-work optimizations:
+
+- quick mode loads only its three requested J-Lens Jacobians onto CUDA rather
+  than all nine fitted readout layers;
+- the answer bank includes only the 16 predeclared quick items;
+- differentiable recurrent replay is bounded to 32 answer tokens while the full
+  answer remains teacher-forced;
+- unused caches and graphs are released and checked after every item;
+- phases remain separate processes so a completed phase cannot retain CUDA
+  allocations in the next one.
+
+After the pinned model and lens are present in the selected Hugging Face cache,
+offline cache lookup can remove network metadata checks from each phase startup:
+
+```powershell
+$env:HF_HUB_OFFLINE = "1"
+$env:PYTORCH_CUDA_ALLOC_CONF = "expandable_segments:True"
+python -m experiments.process_sensitive_replay.run_all_phases `
+  --profile quick `
+  --hf-cache-dir PATH_TO_EXISTING_CACHE `
+  --run-dir assets/psr-quick-v2
+```
+
+`HF_HUB_OFFLINE` should be set only after both pinned artifacts are already in
+that cache. `expandable_segments` can reduce allocator fragmentation; it does
+not change the measurements. Neither setting replaces the per-item CUDA memory
+gate.
+
+Do not enable concurrent phases, multiple item processes, ad-hoc batching,
+`torch.compile`, a different attention backend, or a lower precision inside a
+protocol-bound campaign. Those changes need separate numerical-parity and memory
+validation before they can be treated as equivalent execution optimizations.
+
+## Mechanistic-fidelity contract
+
+Quick mode preserves the original experiment's causal design and mechanistic
+question, while reducing the estimand's answer window, coverage, and resolution.
+It does not claim that the 32-token estimand is identical to the full-answer
+estimand. Validation and regression tests lock the following across both
+profiles:
+
+- the pinned model, tokenizer, J-Lens artifact, dataset, process layer, meta
+  layer, and all three alternative intervention layers;
+- the same seven causal conditions, two meta branches, gradient-based targeted
+  direction construction, and same-layer norm-matched orthogonal random
+  controls;
+- suffix-only Turn-3 replay from the complete teacher-forced answer state;
+- discovery/held-out isolation, support-match thresholds, reset parity, cache
+  integrity, hook scope, candidate-ranking metrics, and interpretation ceiling;
+- the same H1-H7 analysis and the same prohibition on a higher-order causal
+  claim without candidate-to-judgment mediation.
+
+Accordingly, quick mode answers the same *kinds* of mechanistic questions: does
+the intervention persist, affect the later candidate/readout, exceed its random
+control, depend on preserved state, and converge with a support-matched earlier
+layer mechanism? It does not provide the same precision or claim strength. The
+eight-item held-out set, early-32-token gradient objective, three readout layers,
+coarser strength grids, and one candidate make it exploratory. A full run remains
+necessary for dataset-wide confirmation and full-answer/full-layer coverage.
+The resolved quick config explicitly names its estimand
+`early_answer_process_first_32_tokens_with_complete_answer_state`; it never
+labels the bounded objective as full-answer support.
+
 ## Commands
 
 Run the exploratory profile in a new campaign directory:
@@ -198,9 +269,16 @@ representation of answer-process reliability.
 
 ### Quick support matching fails
 
-Treat the result as diagnostic. The alternative may genuinely fail, but the
-coarse beta grid and small discovery set are additional explanations. Do not
-retune within the failed campaign.
+If discovery fails, treat the result as diagnostic. The alternative may
+genuinely fail, but the coarse beta grid and small discovery set are additional
+explanations. If held-out fails, the frozen alternative did not generalize under
+the reduced protocol. Do not retune within either failed campaign.
+
+The post-freeze smoke is different: it reports the two-item match rate only as a
+diagnostic and gates exact reproduction of those items' hash-bound discovery
+support drops. This avoids turning the 65% held-out rule into an accidental
+100% requirement when quick smoke contains two items. A reproduction failure is
+an engineering/state-consistency failure and still halts fail-closed.
 
 ### Quick run passes but full run later disagrees
 

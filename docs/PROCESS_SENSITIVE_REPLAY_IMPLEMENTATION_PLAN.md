@@ -569,8 +569,9 @@ freeze
     write immutable strengths/candidates/selection rule
 
 post_freeze_smoke
-    re-run all critical gates with the frozen protocol, including support
-    matching, reset parity, cache/state integrity, and hook lifetime
+    re-run all critical gates with the frozen protocol, including exact
+    discovery-support reproduction, reset parity, cache/state integrity,
+    and hook lifetime; report subset support matching diagnostically
 
 heldout
     66 items; refuses access unless post_freeze_smoke passed fail-closed
@@ -591,7 +592,7 @@ Three gate families are causally critical:
 1. **Support-match gate**
    - Discovery halts without writing a usable `frozen_protocol.json` if no global alternative strength passes the frozen matching criteria.
    - Pre-discovery engineering smoke validates the alpha/beta-grid machinery but does not require or select a frozen beta.
-   - Post-freeze critical smoke halts immediately if the frozen alternative strength fails its support-match assertion.
+   - Post-freeze critical smoke halts if the frozen strengths do not reproduce the hash-bound discovery support measurements on the smoke items within reset-parity tolerance. The subset support-match rate remains diagnostic because applying the 65% held-out threshold to two or four items changes its effective threshold discontinuously.
    - Held-out evaluation never retunes the strength. Once the paired held-out support data are complete, the aggregate and item-level criteria above are evaluated. Failure sets campaign status to `invalid_support_match`.
 2. **Reset-parity gate**
    - `clean_preserved`, independently reconstructed `clean_reset`, and `targeted_strong_reset` after its perturbed state is discarded must have identical transcript/token hashes and cache topology, and must agree within frozen absolute/relative numerical tolerances for answer support/post-answer state and symmetrically for Turn-3 cache state, logits, confidence/correctness margins, residuals, and candidate readouts.
@@ -655,7 +656,7 @@ CPU tests will cover:
 - candidate-ranking determinism;
 - item-level bootstrap behavior.
 
-The pre-discovery engineering smoke must prove all applicable infrastructure properties below without requiring a frozen beta. After discovery freezes the protocol, the post-freeze critical smoke must re-run the complete list and additionally prove frozen-beta support matching:
+The pre-discovery engineering smoke must prove all applicable infrastructure properties below without requiring a frozen beta. After discovery freezes the protocol, the post-freeze critical smoke must re-run the complete list and additionally prove that the frozen alpha/beta support effects reproduce their hash-bound discovery values:
 
 - recurrent gradient replay has per-token full-logit, total-support, and intervention-layer residual parity with ordinary cached replay at the frozen tolerance;
 - answer-support gradients at the primary and every tested alternative layer
@@ -665,7 +666,9 @@ The pre-discovery engineering smoke must prove all applicable infrastructure pro
 - the alternative targeted direction is the normalized negative
   answer-support gradient at its own layer, while its same-layer random control
   satisfies the frozen orthogonality threshold;
-- in post-freeze smoke, the alternative support drop approximately matches targeted strong on smoke items using the discovery-frozen beta;
+- in post-freeze smoke, targeted-strong and alternative support drops reproduce
+  their corresponding discovery values within reset-parity tolerance; the
+  small-subset support-match measurements remain visible but diagnostic;
 - primary-targeted, alternative-targeted, and both random-control caches are
   distinct from clean and are storage-disjoint;
 - the alternative perturbation remains disabled during Turn 3;
@@ -682,15 +685,23 @@ per-position norms for both targeted mechanisms and their own random controls,
 same-layer random-gradient cosine, support mismatch when a frozen beta exists,
 reset-parity measurements, hybrid-state digests, and factual-prefix, Turn-3
 suffix, prefix-suffix boundary, and final concatenated-transcript hashes. A
-failed post-freeze support-match gate must first write its phase-local full
+failed post-freeze support-reproduction gate must first write its phase-local full
 trial log, aggregate report, and item-level matching measurements, then halt
-without a success marker. A support-match failure in post-freeze smoke, or a
+without a success marker. A support-reproduction failure in post-freeze smoke, or a
 reset-parity, orthogonality, state-preservation, suffix-integrity,
 branch-isolation, or hook-lifetime failure in either smoke phase, is critical
 and stops the run. The runner must return a nonzero exit status and must not
 write a phase-success marker. Discovery may start only after pre-discovery
 engineering smoke passes. Held-out may start only after post-freeze critical
 smoke passes fail-closed.
+
+This post-freeze rule was corrected on 2026-09-04 after the quick profile exposed
+that reusing the held-out `0.65` item-fraction threshold on a two-item smoke
+sample makes the actual requirement `2/2 = 100%`. Discovery already selects beta
+on its complete split, and held-out remains the untouched confirmatory
+generalization gate. The corrected smoke gate is narrower and stricter about its
+engineering purpose: it must reproduce the already measured frozen effects; it
+must not make a new population inference from an underpowered subset.
 
 ### Authorized CUDA-lifetime execution correction (`psr-v9`)
 

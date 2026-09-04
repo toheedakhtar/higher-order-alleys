@@ -879,6 +879,7 @@ def summarize_smoke(
     config: Mapping[str, Any],
     *,
     phase: str,
+    discovery_support_reference: Mapping[str, Mapping[str, float]] | None = None,
 ) -> dict[str, Any]:
     if not records:
         raise RuntimeError("smoke produced no records")
@@ -908,17 +909,38 @@ def summarize_smoke(
         "critical_checks": sorted(required_checks),
     }
     if phase == "post_freeze_smoke":
+        if discovery_support_reference is None:
+            raise ValueError(
+                "post-freeze smoke requires the frozen discovery support reference"
+            )
         support_config = config["support_matching"]
         item_measurements = []
+        reproduction_measurements = []
+        atol = float(config["reset_parity"]["absolute_tolerance"])
+        rtol = float(config["reset_parity"]["relative_tolerance"])
         for record in records:
+            item_id = str(record["item_id"])
+            if item_id not in discovery_support_reference:
+                raise ValueError(
+                    f"post-freeze smoke item {item_id} is absent from the discovery reference"
+                )
             targeted_drop = float(record["support"]["targeted_drop"])
             alternative_drop = float(record["support"]["alternative_drop"])
+            expected = discovery_support_reference[item_id]
+            expected_targeted = float(expected["targeted_drop"])
+            expected_alternative = float(expected["alternative_drop"])
+            targeted_reproduced = math.isclose(
+                targeted_drop, expected_targeted, abs_tol=atol, rel_tol=rtol
+            )
+            alternative_reproduced = math.isclose(
+                alternative_drop, expected_alternative, abs_tol=atol, rel_tol=rtol
+            )
             tolerance = max(
                 float(support_config["absolute_tolerance_nat"]),
                 float(support_config["relative_tolerance"]) * abs(targeted_drop),
             )
             item_measurements.append({
-                "item_id": str(record["item_id"]),
+                "item_id": item_id,
                 "targeted_drop": targeted_drop,
                 "alternative_drop": alternative_drop,
                 "signed_mismatch": alternative_drop - targeted_drop,
@@ -934,6 +956,20 @@ def summarize_smoke(
                     relative_tolerance=float(support_config["relative_tolerance"]),
                 ),
             })
+            reproduction_measurements.append({
+                "item_id": item_id,
+                "targeted_drop": targeted_drop,
+                "expected_targeted_drop": expected_targeted,
+                "targeted_absolute_error": abs(targeted_drop - expected_targeted),
+                "targeted_reproduced": targeted_reproduced,
+                "alternative_drop": alternative_drop,
+                "expected_alternative_drop": expected_alternative,
+                "alternative_absolute_error": abs(
+                    alternative_drop - expected_alternative
+                ),
+                "alternative_reproduced": alternative_reproduced,
+                "passed": targeted_reproduced and alternative_reproduced,
+            })
         matching = support_match_summary(
             [
                 (record["support"]["targeted_drop"], record["support"]["alternative_drop"])
@@ -941,11 +977,26 @@ def summarize_smoke(
             ],
             config,
         )
+        matching["gate_role"] = "diagnostic_only"
+        matching["reason"] = (
+            "support matching was selected on the complete discovery split and is "
+            "tested as a population-level gate on held-out; a smoke subset is "
+            "underpowered"
+        )
         result["support_matching"] = matching
         result["item_support_matching"] = item_measurements
-        if not matching["passed"]:
+        reproduction_passed = all(
+            measurement["passed"] for measurement in reproduction_measurements
+        )
+        result["discovery_support_reproduction"] = {
+            "passed": reproduction_passed,
+            "absolute_tolerance": atol,
+            "relative_tolerance": rtol,
+            "items": reproduction_measurements,
+        }
+        if not reproduction_passed:
             result["passed"] = False
-            result["failure_reason"] = "support_match_gate_failed"
+            result["failure_reason"] = "frozen_support_reproduction_gate_failed"
     else:
         result["support_matching"] = {
             "required": False,

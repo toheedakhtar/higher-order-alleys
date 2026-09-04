@@ -87,6 +87,8 @@ class ProtocolTests(unittest.TestCase):
         frozen = {
             "schema_version": 1,
             "experiment_name": "process_sensitive_replay",
+            "answer_support_objective": self.config["alternative"]["objective"],
+            "gradient_answer_token_limit": None,
             "source_hashes": dict(hashes),
             "discovery_item_ids": list(split["discovery_item_ids"]),
             "weak_alpha": 0.02,

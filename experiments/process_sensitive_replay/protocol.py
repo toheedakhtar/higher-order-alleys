@@ -167,8 +167,13 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
     if int(strengths["weak_min_positive_items"]) != expected_positive_items:
         raise ValueError("execution-profile weak-positive-item gate changed")
     alternative = config["alternative"]
+    expected_objective = (
+        "full_answer_sequence_log_probability"
+        if execution_profile == "full"
+        else "first_32_answer_tokens_sequence_log_probability"
+    )
     if alternative != {
-        "objective": "full_answer_sequence_log_probability",
+        "objective": expected_objective,
         "mechanism": "different_layer_same_objective_answer_support_reduction",
         "selection_inputs": [
             "support_match_quality", "finite_state_integrity", "perturbation_size",
@@ -262,6 +267,10 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
             raise ValueError("quick profile item set changed")
         if gradient_answer_token_limit(config) != 32:
             raise ValueError("quick profile gradient token limit changed")
+        if execution.get("estimand") != (
+            "early_answer_process_first_32_tokens_with_complete_answer_state"
+        ):
+            raise ValueError("quick profile estimand label changed")
         if execution.get("claim_ceiling") != (
             "exploratory mechanistic evidence; not confirmatory"
         ):
@@ -297,6 +306,8 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
         "item_count": len(dataset_rows),
         "item_type_counts": counts,
         "execution_profile": execution_profile,
+        "answer_support_objective": config["alternative"]["objective"],
+        "gradient_answer_token_limit": gradient_answer_token_limit(config),
     }
 
 
@@ -472,6 +483,10 @@ def validate_frozen_protocol(
         raise ValueError("frozen protocol experiment changed")
     if frozen.get("execution_profile", "full") != profile_name(config):
         raise ValueError("frozen protocol execution profile changed")
+    if frozen.get("answer_support_objective") != config["alternative"]["objective"]:
+        raise ValueError("frozen answer-support objective changed")
+    if frozen.get("gradient_answer_token_limit") != gradient_answer_token_limit(config):
+        raise ValueError("frozen gradient answer-token limit changed")
     discovery_ids = [str(value) for value in frozen.get("discovery_item_ids", ())]
     expected_discovery = [str(value) for value in split["discovery_item_ids"]]
     expected_count = sum(

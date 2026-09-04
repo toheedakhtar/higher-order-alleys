@@ -62,16 +62,72 @@ class SmokeGateTests(unittest.TestCase):
         self.assertTrue(result["passed"])
         self.assertFalse(result["support_matching"]["required"])
 
-    def test_post_freeze_smoke_enforces_support_matching(self) -> None:
+    def test_post_freeze_smoke_reports_matching_and_enforces_reproduction(self) -> None:
         records = [smoke_record(str(index), 2.0, 2.1) for index in range(4)]
-        self.assertTrue(summarize_smoke(records, self.config, phase="post_freeze_smoke")["passed"])
-        failed = summarize_smoke(
-            [smoke_record(str(index), 2.0, 5.0) for index in range(4)],
+        reference = {
+            str(index): {"targeted_drop": 2.0, "alternative_drop": 2.1}
+            for index in range(4)
+        }
+        result = summarize_smoke(
+            records,
             self.config,
             phase="post_freeze_smoke",
+            discovery_support_reference=reference,
+        )
+        self.assertTrue(result["passed"])
+        self.assertTrue(result["support_matching"]["passed"])
+        self.assertTrue(result["discovery_support_reproduction"]["passed"])
+
+        support_mismatched = [
+            smoke_record(str(index), 2.0, 5.0) for index in range(4)
+        ]
+        mismatched_reference = {
+            str(index): {"targeted_drop": 2.0, "alternative_drop": 5.0}
+            for index in range(4)
+        }
+        diagnostic_only = summarize_smoke(
+            support_mismatched,
+            self.config,
+            phase="post_freeze_smoke",
+            discovery_support_reference=mismatched_reference,
+        )
+        self.assertTrue(diagnostic_only["passed"])
+        self.assertFalse(diagnostic_only["support_matching"]["passed"])
+        self.assertEqual(diagnostic_only["support_matching"]["gate_role"], "diagnostic_only")
+
+        failed = summarize_smoke(
+            support_mismatched,
+            self.config,
+            phase="post_freeze_smoke",
+            discovery_support_reference=reference,
         )
         self.assertFalse(failed["passed"])
-        self.assertEqual(failed["failure_reason"], "support_match_gate_failed")
+        self.assertEqual(
+            failed["failure_reason"], "frozen_support_reproduction_gate_failed"
+        )
+
+    def test_two_item_quick_smoke_does_not_reapply_heldout_fraction_gate(self) -> None:
+        records = [
+            smoke_record("1", 1.8063122574119461, 3.2893717454969646),
+            smoke_record("14", 1.4088085902753846, 1.2260921771407993),
+        ]
+        reference = {
+            record["item_id"]: {
+                "targeted_drop": record["support"]["targeted_drop"],
+                "alternative_drop": record["support"]["alternative_drop"],
+            }
+            for record in records
+        }
+        result = summarize_smoke(
+            records,
+            self.config,
+            phase="post_freeze_smoke",
+            discovery_support_reference=reference,
+        )
+        self.assertEqual(result["support_matching"]["item_match_fraction"], 0.5)
+        self.assertFalse(result["support_matching"]["passed"])
+        self.assertTrue(result["discovery_support_reproduction"]["passed"])
+        self.assertTrue(result["passed"])
 
     def test_failed_post_freeze_smoke_persists_phase_local_report(self) -> None:
         records = [smoke_record(str(index), 2.0, 5.0) for index in range(4)]
@@ -104,6 +160,19 @@ class SmokeGateTests(unittest.TestCase):
                 ),
                 patch("experiments.process_sensitive_replay.runner._load_pre_discovery_smoke_hash"),
                 patch("experiments.process_sensitive_replay.runner._load_discovery_hashes"),
+                patch(
+                    "experiments.process_sensitive_replay.runner.read_jsonl",
+                    return_value=[
+                        {
+                            "item_id": str(index),
+                            "alpha_grid": {"0.11": {"support_drop": 2.0}},
+                            "beta_grid": {
+                                "19": {"0.2": {"support_drop": 2.0}}
+                            },
+                        }
+                        for index in range(16)
+                    ],
+                ),
                 patch(
                     "experiments.process_sensitive_replay.runner._load_and_validate_frozen_protocol",
                     return_value={
