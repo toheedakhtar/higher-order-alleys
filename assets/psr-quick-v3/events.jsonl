@@ -1,0 +1,100 @@
+{"timestamp": "2026-09-04T14:10:10.608389+00:00", "event_type": "thinking_mode_verified", "item_ids": ["0", "66", "82"], "artifact_sha256": "45b73542600f0132dfaf5019331b201b3b0b9049d8245c81675d88cf039acab5"}
+{"timestamp": "2026-09-04T14:10:15.104250+00:00", "event_type": "answer_discovered", "item_id": "0", "invalid": false}
+{"timestamp": "2026-09-04T14:10:18.188223+00:00", "event_type": "answer_discovered", "item_id": "1", "invalid": false}
+{"timestamp": "2026-09-04T14:10:21.312143+00:00", "event_type": "answer_discovered", "item_id": "2", "invalid": false}
+{"timestamp": "2026-09-04T14:10:24.295879+00:00", "event_type": "answer_discovered", "item_id": "3", "invalid": false}
+{"timestamp": "2026-09-04T14:10:27.423121+00:00", "event_type": "answer_discovered", "item_id": "4", "invalid": false}
+{"timestamp": "2026-09-04T14:10:30.547053+00:00", "event_type": "answer_discovered", "item_id": "14", "invalid": false}
+{"timestamp": "2026-09-04T14:10:33.890054+00:00", "event_type": "answer_discovered", "item_id": "43", "invalid": false}
+{"timestamp": "2026-09-04T14:10:37.321275+00:00", "event_type": "answer_discovered", "item_id": "44", "invalid": false}
+{"timestamp": "2026-09-04T14:10:41.440106+00:00", "event_type": "answer_discovered", "item_id": "48", "invalid": false}
+{"timestamp": "2026-09-04T14:10:45.510388+00:00", "event_type": "answer_discovered", "item_id": "57", "invalid": false}
+{"timestamp": "2026-09-04T14:10:49.095944+00:00", "event_type": "answer_discovered", "item_id": "65", "invalid": false}
+{"timestamp": "2026-09-04T14:10:51.508105+00:00", "event_type": "answer_discovered", "item_id": "66", "invalid": false}
+{"timestamp": "2026-09-04T14:10:56.337450+00:00", "event_type": "answer_discovered", "item_id": "67", "invalid": false}
+{"timestamp": "2026-09-04T14:11:02.310915+00:00", "event_type": "answer_discovered", "item_id": "68", "invalid": false}
+{"timestamp": "2026-09-04T14:11:11.678700+00:00", "event_type": "answer_discovered", "item_id": "82", "invalid": false}
+{"timestamp": "2026-09-04T14:11:19.990601+00:00", "event_type": "answer_discovered", "item_id": "83", "invalid": false}
+{"timestamp": "2026-09-04T14:11:33.884382+00:00", "event_type": "smoke_trial_started", "phase": "pre_discovery_smoke", "item_id": "1"}
+{"timestamp": "2026-09-04T14:13:46.518503+00:00", "event_type": "smoke_trial_completed", "phase": "pre_discovery_smoke", "item_id": "1"}
+{"timestamp": "2026-09-04T14:13:46.524266+00:00", "event_type": "smoke_trial_started", "phase": "pre_discovery_smoke", "item_id": "14"}
+{"timestamp": "2026-09-04T14:16:01.230830+00:00", "event_type": "smoke_trial_completed", "phase": "pre_discovery_smoke", "item_id": "14"}
+{"timestamp": "2026-09-04T14:16:13.774602+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "1"}
+{"timestamp": "2026-09-04T14:16:31.285240+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "1"}
+{"timestamp": "2026-09-04T14:16:31.285315+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "14"}
+{"timestamp": "2026-09-04T14:16:48.155196+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "14"}
+{"timestamp": "2026-09-04T14:16:48.155243+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "43"}
+{"timestamp": "2026-09-04T14:17:06.066000+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "43"}
+{"timestamp": "2026-09-04T14:17:06.066045+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "44"}
+{"timestamp": "2026-09-04T14:17:24.431243+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "44"}
+{"timestamp": "2026-09-04T14:17:24.431296+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "48"}
+{"timestamp": "2026-09-04T14:17:46.223960+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "48"}
+{"timestamp": "2026-09-04T14:17:46.224006+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "65"}
+{"timestamp": "2026-09-04T14:18:05.499833+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "65"}
+{"timestamp": "2026-09-04T14:18:05.499878+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "66"}
+{"timestamp": "2026-09-04T14:18:19.824968+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "66"}
+{"timestamp": "2026-09-04T14:18:19.825022+00:00", "event_type": "discovery_alpha_grid_started", "item_id": "83"}
+{"timestamp": "2026-09-04T14:18:52.296157+00:00", "event_type": "discovery_alpha_grid_completed", "item_id": "83"}
+{"timestamp": "2026-09-04T14:18:52.296526+00:00", "event_type": "discovery_alpha_strengths_selected", "weak_alpha": 0.1, "strong_alpha": 0.11, "strong_fallback_below_four_nats": true, "weak_median_support_drop": 1.3037085388541527, "strong_median_support_drop": 1.4459328668492617}
+{"timestamp": "2026-09-04T14:18:52.296561+00:00", "event_type": "discovery_beta_grid_started", "item_id": "1", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:19:45.066308+00:00", "event_type": "discovery_beta_grid_completed", "item_id": "1", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:19:45.066357+00:00", "event_type": "discovery_beta_grid_started", "item_id": "14", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:20:38.564752+00:00", "event_type": "discovery_beta_grid_completed", "item_id": "14", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:20:38.564802+00:00", "event_type": "discovery_beta_grid_started", "item_id": "43", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:21:35.719217+00:00", "event_type": "discovery_beta_grid_completed", "item_id": "43", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:21:35.719265+00:00", "event_type": "discovery_beta_grid_started", "item_id": "44", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:22:34.336169+00:00", "event_type": "discovery_beta_grid_completed", "item_id": "44", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:22:34.336219+00:00", "event_type": "discovery_beta_grid_started", "item_id": "48", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:23:43.918152+00:00", "event_type": "discovery_beta_grid_completed", "item_id": "48", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:23:43.918201+00:00", "event_type": "discovery_beta_grid_started", "item_id": "65", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:24:45.463832+00:00", "event_type": "discovery_beta_grid_completed", "item_id": "65", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:24:45.463892+00:00", "event_type": "discovery_beta_grid_started", "item_id": "66", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:25:32.289921+00:00", "event_type": "discovery_beta_grid_completed", "item_id": "66", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:25:32.289995+00:00", "event_type": "discovery_beta_grid_started", "item_id": "83", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:27:19.377125+00:00", "event_type": "discovery_beta_grid_completed", "item_id": "83", "frozen_strong_alpha": 0.11}
+{"timestamp": "2026-09-04T14:27:19.378469+00:00", "event_type": "discovery_strength_grid_completed", "item_id": "1"}
+{"timestamp": "2026-09-04T14:27:19.379619+00:00", "event_type": "discovery_strength_grid_completed", "item_id": "14"}
+{"timestamp": "2026-09-04T14:27:19.380732+00:00", "event_type": "discovery_strength_grid_completed", "item_id": "43"}
+{"timestamp": "2026-09-04T14:27:19.381847+00:00", "event_type": "discovery_strength_grid_completed", "item_id": "44"}
+{"timestamp": "2026-09-04T14:27:19.382984+00:00", "event_type": "discovery_strength_grid_completed", "item_id": "48"}
+{"timestamp": "2026-09-04T14:27:19.384112+00:00", "event_type": "discovery_strength_grid_completed", "item_id": "65"}
+{"timestamp": "2026-09-04T14:27:19.391915+00:00", "event_type": "discovery_strength_grid_completed", "item_id": "66"}
+{"timestamp": "2026-09-04T14:27:19.399972+00:00", "event_type": "discovery_strength_grid_completed", "item_id": "83"}
+{"timestamp": "2026-09-04T14:27:19.401384+00:00", "event_type": "discovery_strengths_selected", "weak_alpha": 0.1, "strong_alpha": 0.11, "beta": 0.2, "alternative_layer": 23}
+{"timestamp": "2026-09-04T14:27:19.401417+00:00", "event_type": "candidate_discovery_trial_started", "item_id": "1"}
+{"timestamp": "2026-09-04T14:28:58.810605+00:00", "event_type": "candidate_discovery_trial_completed", "phase": "discovery", "item_id": "1"}
+{"timestamp": "2026-09-04T14:28:58.820245+00:00", "event_type": "candidate_discovery_trial_started", "item_id": "14"}
+{"timestamp": "2026-09-04T14:30:40.028038+00:00", "event_type": "candidate_discovery_trial_completed", "phase": "discovery", "item_id": "14"}
+{"timestamp": "2026-09-04T14:30:40.038159+00:00", "event_type": "candidate_discovery_trial_started", "item_id": "43"}
+{"timestamp": "2026-09-04T14:32:23.032699+00:00", "event_type": "candidate_discovery_trial_completed", "phase": "discovery", "item_id": "43"}
+{"timestamp": "2026-09-04T14:32:23.042581+00:00", "event_type": "candidate_discovery_trial_started", "item_id": "44"}
+{"timestamp": "2026-09-04T14:34:06.719342+00:00", "event_type": "candidate_discovery_trial_completed", "phase": "discovery", "item_id": "44"}
+{"timestamp": "2026-09-04T14:34:06.729233+00:00", "event_type": "candidate_discovery_trial_started", "item_id": "48"}
+{"timestamp": "2026-09-04T14:35:58.910837+00:00", "event_type": "candidate_discovery_trial_completed", "phase": "discovery", "item_id": "48"}
+{"timestamp": "2026-09-04T14:35:58.921113+00:00", "event_type": "candidate_discovery_trial_started", "item_id": "65"}
+{"timestamp": "2026-09-04T14:37:45.085084+00:00", "event_type": "candidate_discovery_trial_completed", "phase": "discovery", "item_id": "65"}
+{"timestamp": "2026-09-04T14:37:45.095473+00:00", "event_type": "candidate_discovery_trial_started", "item_id": "66"}
+{"timestamp": "2026-09-04T14:39:19.112085+00:00", "event_type": "candidate_discovery_trial_completed", "phase": "discovery", "item_id": "66"}
+{"timestamp": "2026-09-04T14:39:19.126330+00:00", "event_type": "candidate_discovery_trial_started", "item_id": "83"}
+{"timestamp": "2026-09-04T14:41:42.860595+00:00", "event_type": "candidate_discovery_trial_completed", "phase": "discovery", "item_id": "83"}
+{"timestamp": "2026-09-04T14:41:43.886576+00:00", "event_type": "candidate_direction_selected", "token_id": 75075, "layer": 42, "orientation": -1, "aggregate_rank": 1, "direction_sha256": "8515912d78e8afe1a932bf06dc43cb41a54e446e91a8abbbe008a28fac54ac84"}
+{"timestamp": "2026-09-04T14:41:58.309175+00:00", "event_type": "smoke_trial_started", "phase": "post_freeze_smoke", "item_id": "1"}
+{"timestamp": "2026-09-04T14:43:41.264695+00:00", "event_type": "smoke_trial_completed", "phase": "post_freeze_smoke", "item_id": "1"}
+{"timestamp": "2026-09-04T14:43:41.270660+00:00", "event_type": "smoke_trial_started", "phase": "post_freeze_smoke", "item_id": "14"}
+{"timestamp": "2026-09-04T14:45:24.333012+00:00", "event_type": "smoke_trial_completed", "phase": "post_freeze_smoke", "item_id": "14"}
+{"timestamp": "2026-09-04T14:45:36.692418+00:00", "event_type": "heldout_trial_started", "item_id": "0"}
+{"timestamp": "2026-09-04T14:47:22.200131+00:00", "event_type": "smoke_trial_completed", "phase": "heldout", "item_id": "0"}
+{"timestamp": "2026-09-04T14:47:22.206510+00:00", "event_type": "heldout_trial_started", "item_id": "2"}
+{"timestamp": "2026-09-04T14:49:02.476629+00:00", "event_type": "smoke_trial_completed", "phase": "heldout", "item_id": "2"}
+{"timestamp": "2026-09-04T14:49:02.483365+00:00", "event_type": "heldout_trial_started", "item_id": "3"}
+{"timestamp": "2026-09-04T14:50:40.980752+00:00", "event_type": "smoke_trial_completed", "phase": "heldout", "item_id": "3"}
+{"timestamp": "2026-09-04T14:50:40.987354+00:00", "event_type": "heldout_trial_started", "item_id": "4"}
+{"timestamp": "2026-09-04T14:52:22.285193+00:00", "event_type": "smoke_trial_completed", "phase": "heldout", "item_id": "4"}
+{"timestamp": "2026-09-04T14:52:22.291814+00:00", "event_type": "heldout_trial_started", "item_id": "57"}
+{"timestamp": "2026-09-04T14:54:15.528367+00:00", "event_type": "smoke_trial_completed", "phase": "heldout", "item_id": "57"}
+{"timestamp": "2026-09-04T14:54:15.534820+00:00", "event_type": "heldout_trial_started", "item_id": "67"}
+{"timestamp": "2026-09-04T14:56:10.253124+00:00", "event_type": "smoke_trial_completed", "phase": "heldout", "item_id": "67"}
+{"timestamp": "2026-09-04T14:56:10.263548+00:00", "event_type": "heldout_trial_started", "item_id": "68"}
+{"timestamp": "2026-09-04T14:58:19.046496+00:00", "event_type": "smoke_trial_completed", "phase": "heldout", "item_id": "68"}
+{"timestamp": "2026-09-04T14:58:19.057274+00:00", "event_type": "heldout_trial_started", "item_id": "82"}
+{"timestamp": "2026-09-04T15:00:50.765589+00:00", "event_type": "smoke_trial_completed", "phase": "heldout", "item_id": "82"}

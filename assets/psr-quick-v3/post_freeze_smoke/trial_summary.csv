@@ -1,0 +1,3 @@
+item_id,phase,clean_support,targeted_drop,alternative_drop,random_drop,alternative_random_drop,reset_parity,cache_integrity
+1,post_freeze_smoke,-0.0007306129048174625,1.8063122574119461,3.2893717454969646,-5.243791520115337e-06,7.36376504164582e-05,True,True
+14,post_freeze_smoke,-0.00042123559205720085,1.4088085902753846,1.2260921771407993,4.087756724402425e-05,5.434527997749683e-05,True,True

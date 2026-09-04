@@ -1,0 +1,18 @@
+{
+  "aggregate_tolerance": 0.7360183869048882,
+  "alternative_median_drop": 3.1269135286804612,
+  "item_fraction_matched": true,
+  "item_match_fraction": 1.0,
+  "matched_items": 8,
+  "mean_absolute_mismatch": 3.2096190855774145,
+  "mean_signed_mismatch": 2.415867447474299,
+  "median_absolute_mismatch": 0.2639499589713523,
+  "median_drop_matched": true,
+  "median_mismatch_matched": true,
+  "median_signed_mismatch": 0.05449115001931659,
+  "passed": true,
+  "required_item_match_fraction": 0.65,
+  "targeted_median_drop": 2.9440735476195528,
+  "unmatched_items": 0,
+  "valid_items": 8
+}

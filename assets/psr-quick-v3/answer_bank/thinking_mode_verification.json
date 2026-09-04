@@ -1,0 +1,62 @@
+{
+  "examples": [
+    {
+      "closed_empty_thinking_block": true,
+      "enable_thinking": false,
+      "item_id": "0",
+      "item_type": "calibration",
+      "question_token_hash": "5ed25439b3230ad444d93d3fbf7d2a0892dc3f5e1f90c5b20879ddf7a91c8a3e",
+      "rendered_prompt_token_count": 67,
+      "rendered_prompt_token_hash": "2d14ea2d23b92e83cf7e41af0905b5c43e3ba248d537d298e27f89f8ab8cb697",
+      "rendered_suffix": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+      "rendered_suffix_token_ids": [
+        248045,
+        74455,
+        198,
+        248068,
+        271,
+        248069,
+        271
+      ]
+    },
+    {
+      "closed_empty_thinking_block": true,
+      "enable_thinking": false,
+      "item_id": "66",
+      "item_type": "prospective",
+      "question_token_hash": "b17017f3d9b4d63c0747c6f5d9b2a1efc4de03fd0b069126d473da945dc678bb",
+      "rendered_prompt_token_count": 20,
+      "rendered_prompt_token_hash": "713b9bbdc309786169d1352a64cbf95fa1865a609a7c1ea758894670e275ebb7",
+      "rendered_suffix": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+      "rendered_suffix_token_ids": [
+        248045,
+        74455,
+        198,
+        248068,
+        271,
+        248069,
+        271
+      ]
+    },
+    {
+      "closed_empty_thinking_block": true,
+      "enable_thinking": false,
+      "item_id": "82",
+      "item_type": "knowledge_boundary",
+      "question_token_hash": "1d48c4a69632cca0b84c33bbe16ed6ad6d2dce0bae6079280d8cc083b5246f75",
+      "rendered_prompt_token_count": 20,
+      "rendered_prompt_token_hash": "1c56a69e5b700e982e33472d26cbd0d6543565d2faa718922ec7ac3d611b4d3d",
+      "rendered_suffix": "<|im_start|>assistant\n<think>\n\n</think>\n\n",
+      "rendered_suffix_token_ids": [
+        248045,
+        74455,
+        198,
+        248068,
+        271,
+        248069,
+        271
+      ]
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,99 @@
+{
+  "critical_checks": [
+    "alternative_gradient_parity",
+    "alternative_norm_ceiling",
+    "alternative_random_norm_match",
+    "branch_isolation",
+    "clean_gradient_cache_support_parity",
+    "downstream_state_changed",
+    "gradient_finite_nonzero",
+    "gradient_hook_scope",
+    "gradient_residual_parity",
+    "gradient_sign_finite_difference",
+    "gradient_token_logit_parity",
+    "gradient_total_support_parity",
+    "hybrid_cache_integrity",
+    "intervention_hook_scope",
+    "random_norm_match",
+    "reset_parity",
+    "teacher_forcing_all_conditions",
+    "turn3_suffix_integrity",
+    "visible_hash_parity"
+  ],
+  "discovery_support_reproduction": {
+    "absolute_tolerance": 1e-05,
+    "items": [
+      {
+        "alternative_absolute_error": 0.0,
+        "alternative_drop": 3.2893717454969646,
+        "alternative_reproduced": true,
+        "expected_alternative_drop": 3.2893717454969646,
+        "expected_targeted_drop": 1.8063122574119461,
+        "item_id": "1",
+        "passed": true,
+        "targeted_absolute_error": 0.0,
+        "targeted_drop": 1.8063122574119461,
+        "targeted_reproduced": true
+      },
+      {
+        "alternative_absolute_error": 0.0,
+        "alternative_drop": 1.2260921771407993,
+        "alternative_reproduced": true,
+        "expected_alternative_drop": 1.2260921771407993,
+        "expected_targeted_drop": 1.4088085902753846,
+        "item_id": "14",
+        "passed": true,
+        "targeted_absolute_error": 0.0,
+        "targeted_drop": 1.4088085902753846,
+        "targeted_reproduced": true
+      }
+    ],
+    "passed": true,
+    "relative_tolerance": 1e-05
+  },
+  "item_support_matching": [
+    {
+      "absolute_mismatch": 1.4830594880850185,
+      "alternative_drop": 3.2893717454969646,
+      "item_id": "1",
+      "item_tolerance": 0.5,
+      "signed_mismatch": 1.4830594880850185,
+      "support_matched": false,
+      "targeted_drop": 1.8063122574119461,
+      "targeted_drop_positive": true
+    },
+    {
+      "absolute_mismatch": 0.1827164131345853,
+      "alternative_drop": 1.2260921771407993,
+      "item_id": "14",
+      "item_tolerance": 0.5,
+      "signed_mismatch": -0.1827164131345853,
+      "support_matched": true,
+      "targeted_drop": 1.4088085902753846,
+      "targeted_drop_positive": true
+    }
+  ],
+  "items": 2,
+  "passed": true,
+  "phase": "post_freeze_smoke",
+  "support_matching": {
+    "aggregate_tolerance": 0.5,
+    "alternative_median_drop": 2.257731961318882,
+    "gate_role": "diagnostic_only",
+    "item_fraction_matched": false,
+    "item_match_fraction": 0.5,
+    "matched_items": 1,
+    "mean_absolute_mismatch": 0.8328879506098019,
+    "mean_signed_mismatch": 0.6501715374752166,
+    "median_absolute_mismatch": 0.8328879506098019,
+    "median_drop_matched": false,
+    "median_mismatch_matched": false,
+    "median_signed_mismatch": 0.6501715374752166,
+    "passed": false,
+    "reason": "support matching was selected on the complete discovery split and is tested as a population-level gate on held-out; a smoke subset is underpowered",
+    "required_item_match_fraction": 0.65,
+    "targeted_median_drop": 1.6075604238436654,
+    "unmatched_items": 1,
+    "valid_items": 2
+  }
+}

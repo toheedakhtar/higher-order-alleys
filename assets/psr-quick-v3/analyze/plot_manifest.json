@@ -1,0 +1,17 @@
+{
+  "analyze/plots/01_manipulation_check.png": "1a25c9679c409b781bcc03795bd0be2d9b26b154c8f8ceb334812f2074f9d3d6",
+  "analyze/plots/02_confidence_vs_support.png": "f2a05955de055d24b35b2a81e928b4d7f9d329170e70e8d5d4dc7f7edf07155d",
+  "analyze/plots/03_candidate_vs_support_candidate_1.png": "f4dd4c7490a6656c185afaa73940494e8d23a6b2db6b3bc655aaaa073df9bc07",
+  "analyze/plots/04_targeted_vs_random_candidate_1.png": "637b5f8195cd02d4bad87a8df65a2dc1dd57faf6259a03625bf39d8ebabd68e4",
+  "analyze/plots/04a_primary_vs_alternative_candidate_1.png": "f2d9f2ca3d29c1057bd76b4eea263ca334474b31f91c7fd4a77ef4ba41856c20",
+  "analyze/plots/04b_alternative_vs_random_candidate_1.png": "f303150c6f4313649b658ed7cd5884e70c915e39e8a7cf27291b2d278afc316a",
+  "analyze/plots/05_preserved_vs_reset_candidate_1.png": "06145bfed120ac3ba630c3abc118d660e1fa1a9d03a0d915a2e5394ad45ffd02",
+  "analyze/plots/06_clean_vs_targeted_candidate_1.png": "79f370d81bbdeb6cf2dff66dca7ab72d70e045eeae4ceabb0ccf272622de7d69",
+  "analyze/plots/07_generic_evaluator_controls.png": "186dfe4523f162d8b0ce471f4aa737c9c5cbeafc775d577edfe005591708b35d",
+  "analyze/plots/08_layer_profile_candidate_1.png": "2538a76fc9aa45b6c0ec5658e24bf0f5710950e2470409f027e8affeb73d3253",
+  "analyze/plots/09_effect_summary_candidate_1.png": "6fe97a961c229b3c6bfd6760963036c9fbc444648a1c3ae1c297dd8f2acfc35c",
+  "analyze/plots/10_mechanism_control_comparison_candidate_1.png": "0bdd8db60c7cb57b03f6ca63444575bc634031bfc0bdfd82f9c96a64c9e868f0",
+  "analyze/plots/11_support_normalized_convergence_candidate_1.png": "8f22dd5533ca9e116e7b9af5ff9bf63d52633cdbe3e1a49971a15ffd27082dc8",
+  "analyze/plots/12_item_level_support_matching.png": "0959ca08d883a659e635ded4aaaec136f8315d5c7559dd30054daa38c8d14533",
+  "analyze/plots/13_support_vs_mechanism_residual_candidate_1.png": "4b7c1445b2a27018b5ca9486db74d1e0b0cefde4d2b94e4f76d54068bf0136e8"
+}

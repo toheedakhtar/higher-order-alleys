@@ -1,0 +1,292 @@
+{
+  "alternative_layer": 23,
+  "candidate_statistics": [
+    {
+      "branch": "confidence",
+      "candidate_label": " UIImagePickerController",
+      "candidate_layer": 42,
+      "candidate_rank": 1,
+      "candidate_token_id": 75075,
+      "h1_targeted_minus_clean": {
+        "item_bootstrap_95_ci": [
+          0.0078125,
+          0.05078125
+        ],
+        "mean": 0.029296875,
+        "median": 0.0390625,
+        "n": 8
+      },
+      "h2_alternative_minus_clean": {
+        "item_bootstrap_95_ci": [
+          0.017578125,
+          0.076171875
+        ],
+        "mean": 0.046875,
+        "median": 0.0390625,
+        "n": 8
+      },
+      "h3_item_fixed_effect_model": {
+        "abs_mechanism_to_shared_effect_ratio": 0.5838693038729594,
+        "beta_mechanism": 0.02565831901785466,
+        "beta_support": -0.003344634667892151,
+        "item_bootstrap_95_ci": {
+          "abs_mechanism_to_shared_effect_ratio": [
+            0.039735570812452534,
+            1.3877298843251498
+          ],
+          "beta_mechanism": [
+            -0.015625,
+            0.05845848571196739
+          ],
+          "beta_support": [
+            -0.02103598303681371,
+            5.6236978430691475e-06
+          ]
+        }
+      },
+      "h3_support_normalized_response_difference": {
+        "item_bootstrap_95_ci": [
+          -0.06289527316714563,
+          0.005159404316732703
+        ],
+        "mean": -0.021053165884187677,
+        "median": -0.0006826570662959132,
+        "n": 8
+      },
+      "h3_targeted_minus_alternative": {
+        "item_bootstrap_95_ci": [
+          -0.048828125,
+          0.015625
+        ],
+        "mean": -0.017578125,
+        "median": -0.015625,
+        "n": 8
+      },
+      "h4_alternative_minus_random": {
+        "item_bootstrap_95_ci": [
+          0.025390625,
+          0.09375
+        ],
+        "mean": 0.05859375,
+        "median": 0.0390625,
+        "n": 8
+      },
+      "h4_targeted_minus_random": {
+        "item_bootstrap_95_ci": [
+          0.015625,
+          0.04296875
+        ],
+        "mean": 0.029296875,
+        "median": 0.0390625,
+        "n": 8
+      },
+      "h5_targeted_preserved_minus_reset": {
+        "item_bootstrap_95_ci": [
+          0.0078125,
+          0.048828125
+        ],
+        "mean": 0.029296875,
+        "median": 0.0390625,
+        "n": 8
+      },
+      "h6_candidate_score_vs_support": {
+        "item_bootstrap_95_ci": {
+          "pearson": [
+            0.03867841851395905,
+            0.8340342565399198
+          ],
+          "slope": [
+            3.2975743317184756e-05,
+            0.0014965470536075793
+          ],
+          "spearman": [
+            0.27191150754749266,
+            0.8759710181379088
+          ]
+        },
+        "observations": 24,
+        "pearson": 0.4676685215702834,
+        "slope": 0.00048181040481394424,
+        "spearman": 0.635584857297147
+      },
+      "h7_confidence_margin_vs_support": {
+        "item_bootstrap_95_ci": {
+          "pearson": [
+            -0.9418590872605842,
+            -0.6118331484025643
+          ],
+          "slope": [
+            -0.03550534239335492,
+            -0.014159118972198355
+          ],
+          "spearman": [
+            -0.9684487291849255,
+            -0.6453462726069695
+          ]
+        },
+        "observations": 24,
+        "pearson": -0.8296960443285966,
+        "slope": -0.01829586853879431,
+        "spearman": -0.8895652173913043
+      },
+      "interpretation_ceiling": "evidence for a process-property / process-sensitive representation; an M(P)-like candidate"
+    },
+    {
+      "branch": "correctness",
+      "candidate_label": " UIImagePickerController",
+      "candidate_layer": 42,
+      "candidate_rank": 1,
+      "candidate_token_id": 75075,
+      "h1_targeted_minus_clean": {
+        "item_bootstrap_95_ci": [
+          0.0166015625,
+          0.05078125
+        ],
+        "mean": 0.03271484375,
+        "median": 0.02734375,
+        "n": 8
+      },
+      "h2_alternative_minus_clean": {
+        "item_bootstrap_95_ci": [
+          0.0048828125,
+          0.20703125
+        ],
+        "mean": 0.09521484375,
+        "median": 0.0390625,
+        "n": 8
+      },
+      "h3_item_fixed_effect_model": {
+        "abs_mechanism_to_shared_effect_ratio": 0.9002187734256605,
+        "beta_mechanism": 0.06725267203814748,
+        "beta_support": -0.001967273512094475,
+        "item_bootstrap_95_ci": {
+          "abs_mechanism_to_shared_effect_ratio": [
+            0.03740626427031593,
+            1.523732860031702
+          ],
+          "beta_mechanism": [
+            -0.037376734502638,
+            0.19165884740302616
+          ],
+          "beta_support": [
+            -0.13390132731924348,
+            0.03189047023444616
+          ]
+        }
+      },
+      "h3_support_normalized_response_difference": {
+        "item_bootstrap_95_ci": [
+          -0.00818499127924724,
+          0.037993052073150124
+        ],
+        "mean": 0.010217793534037768,
+        "median": -0.0012665241764911938,
+        "n": 8
+      },
+      "h3_targeted_minus_alternative": {
+        "item_bootstrap_95_ci": [
+          -0.1630859375,
+          0.0185546875
+        ],
+        "mean": -0.0625,
+        "median": -0.03125,
+        "n": 8
+      },
+      "h4_alternative_minus_random": {
+        "item_bootstrap_95_ci": [
+          0.01708984375,
+          0.21875
+        ],
+        "mean": 0.10498046875,
+        "median": 0.05078125,
+        "n": 8
+      },
+      "h4_targeted_minus_random": {
+        "item_bootstrap_95_ci": [
+          0.0087890625,
+          0.05615234375
+        ],
+        "mean": 0.03369140625,
+        "median": 0.03515625,
+        "n": 8
+      },
+      "h5_targeted_preserved_minus_reset": {
+        "item_bootstrap_95_ci": [
+          0.0166015625,
+          0.05029296875
+        ],
+        "mean": 0.03271484375,
+        "median": 0.02734375,
+        "n": 8
+      },
+      "h6_candidate_score_vs_support": {
+        "item_bootstrap_95_ci": {
+          "pearson": [
+            0.4509132454107586,
+            0.9141810059007288
+          ],
+          "slope": [
+            0.0007458240565244557,
+            0.0012759244499373533
+          ],
+          "spearman": [
+            0.32923667964510467,
+            0.8579558095620039
+          ]
+        },
+        "observations": 24,
+        "pearson": 0.8148842768153618,
+        "slope": 0.0009783528579235866,
+        "spearman": 0.6745054643918978
+      },
+      "h7_confidence_margin_vs_support": null,
+      "interpretation_ceiling": "evidence for a process-property / process-sensitive representation; an M(P)-like candidate"
+    }
+  ],
+  "execution_profile": "quick",
+  "exploratory": true,
+  "heldout_items": 8,
+  "interpretation": {
+    "automatic_candidate_classification": false,
+    "causal_mediation_tested": false,
+    "classification_reason": "no explicitly frozen held-out convergence decision threshold",
+    "maximum_claim": "evidence for a process-property / process-sensitive representation; an M(P)-like candidate",
+    "prohibited_claim": "proven higher-order representation without candidate-to-judgment/control causal mediation"
+  },
+  "plots": [
+    "analyze/plots/01_manipulation_check.png",
+    "analyze/plots/02_confidence_vs_support.png",
+    "analyze/plots/03_candidate_vs_support_candidate_1.png",
+    "analyze/plots/04_targeted_vs_random_candidate_1.png",
+    "analyze/plots/04a_primary_vs_alternative_candidate_1.png",
+    "analyze/plots/04b_alternative_vs_random_candidate_1.png",
+    "analyze/plots/05_preserved_vs_reset_candidate_1.png",
+    "analyze/plots/06_clean_vs_targeted_candidate_1.png",
+    "analyze/plots/07_generic_evaluator_controls.png",
+    "analyze/plots/08_layer_profile_candidate_1.png",
+    "analyze/plots/09_effect_summary_candidate_1.png",
+    "analyze/plots/10_mechanism_control_comparison_candidate_1.png",
+    "analyze/plots/11_support_normalized_convergence_candidate_1.png",
+    "analyze/plots/12_item_level_support_matching.png",
+    "analyze/plots/13_support_vs_mechanism_residual_candidate_1.png"
+  ],
+  "schema_version": 1,
+  "support_matching": {
+    "aggregate_tolerance": 0.7360183869048882,
+    "alternative_median_drop": 3.1269135286804612,
+    "item_fraction_matched": true,
+    "item_match_fraction": 1.0,
+    "matched_items": 8,
+    "mean_absolute_mismatch": 3.2096190855774145,
+    "mean_signed_mismatch": 2.415867447474299,
+    "median_absolute_mismatch": 0.2639499589713523,
+    "median_drop_matched": true,
+    "median_mismatch_matched": true,
+    "median_signed_mismatch": 0.05449115001931659,
+    "passed": true,
+    "required_item_match_fraction": 0.65,
+    "targeted_median_drop": 2.9440735476195528,
+    "unmatched_items": 0,
+    "valid_items": 8
+  }
+}
