@@ -1,0 +1,2 @@
+{"timestamp": "2026-09-04T01:45:49.994500+00:00", "phase": "discovery", "status": "invalid_support_match", "error_type": "RuntimeError", "message": "support_match_gate_failed"}
+{"timestamp": "2026-09-04T01:47:00.591906+00:00", "phase": "freeze", "status": "failed", "error_type": "FileNotFoundError", "message": "[Errno 2] No such file or directory: '/home/higher-order-alleys/assets/psr-v7/discovery/discovery_vocab_scores.pt'"}

@@ -1,0 +1,303 @@
+{
+  "experiment_name": "process_sensitive_replay",
+  "campaign_created_at": "2026-09-04T01:05:25.680881+00:00",
+  "updated_at": "2026-09-04T01:47:00.592226+00:00",
+  "active_phase": "freeze",
+  "status": "failed",
+  "hostname": "6ccf6fdd376b",
+  "platform": "Linux-6.8.0-71-generic-x86_64-with-glibc2.35",
+  "python": "3.11.15 (main, May 10 2026, 19:28:18) [Clang 22.1.3 ]",
+  "packages": {
+    "torch": "2.13.0",
+    "transformers": "5.15.1",
+    "jlens": "0.1.0",
+    "huggingface-hub": "1.27.0"
+  },
+  "hashes": {
+    "config": "7fcceb7bf79a1e0d90906bafb4c8c6db0d6b839f7e98a34d4f2b2fb5c0cca33b",
+    "dataset": "4e98c0c7f8b7a25833fa8c2e2f55356f0995c5a8ace8e003c4d4c8bd0d0f83c6",
+    "scientific_protocol": "73724d9a4e3bbf17568d45f5e09169f5581d4bce7012c8d69d5a26e0b746bb8b",
+    "code": "4f29aa1b01260c6b8d06865233522149bfcced5b418c330f49ecf2b7831577bc",
+    "model_spec": "f583181c7b7848ecf26a26789398d30d88babc2e9aae9f612576912502c6b606",
+    "lens_spec": "88c4a02d05d3ed77608eff64c6d8e2b09b6a8cc6eed481e408533906d7a8420e",
+    "model_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "tokenizer_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "lens_revision": "0731326edff4ae730ffc5356fe1a4728c748b3a6",
+    "lens_sha256": "1718c8c52dd8a9dad03738d4d625937c1fbba10be325b872ed446c7290fc11e1",
+    "runtime_packages": "36a2d33789fedffc6ca498c638f82df4c7c5dd6c9d31815a4500d9e7d48366ab",
+    "answer_bank": "9f7007f6f0a6bb672c97a8562c58e4f8877991a9e8e55a33bdf6ba997e89425f",
+    "split_manifest": "4e9decce102d9cf3fdceb97388ca71e55c60daf43e9a419e9a32cf0666d960fa",
+    "thinking_mode_verification": "45b73542600f0132dfaf5019331b201b3b0b9049d8245c81675d88cf039acab5",
+    "pre_discovery_smoke_trials": "5202ec8dd64beb11060b20e4031214f678bc4cd0df4b3ddecdacb7a6f331ef23",
+    "pre_discovery_smoke_report": "7dc77822dcc0aaac09307710ed091878c88a985957572c42ed39a0fc3d5a1372",
+    "pre_discovery_smoke_trial_summary": "c5b515494b17bef6e0d6b794b99be4fb7d0a47b3b7dda77525c38bdf84c4f187",
+    "pre_discovery_smoke_candidate_scores": "7b374d378fca720f946513b5e2fdf518056cbed8c75dde8b5a1de98b74f213af",
+    "discovery_alpha_grid": "037192e2e76722bdd5a4071d78b7f7bc791a273a0f7ad739e1923b4a2fdb76f0",
+    "discovery_alpha_diagnostics": "4b2fad79bf27c863e0516ac808b51cd10ee959a46cf3a3c6e7398c0ac39ea901",
+    "discovery_beta_grid": "87c268d44abf21d66c3de9b08ae36765b00656008f7fdfcc7213903689440cde",
+    "discovery_beta_diagnostics": "3c66ed6b57593346f49eec0f590bfd94a5a8aab989396f4cfce1552f00c2b081",
+    "discovery_strength_grid": "60b0bf97e434d0c160f15ea167ea83310a9e1511bb3e67606003a66e60537ad9"
+  },
+  "runtime": {
+    "architecture": "Qwen3_5ForConditionalGeneration",
+    "model_type": "qwen3_5_text",
+    "num_hidden_layers": 64,
+    "hidden_size": 5120,
+    "process_layer_type": "full_attention",
+    "input_device": "cuda:0",
+    "cuda": true,
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "lens_path": "/home/.cache/huggingface/hub/models--neuronpedia--jacobian-lens/snapshots/0731326edff4ae730ffc5356fe1a4728c748b3a6/qwen3.6-27b/jlens/Salesforce-wikitext/Qwen3.6-27B_jacobian_lens_n1000.pt",
+    "lens_revision": "0731326edff4ae730ffc5356fe1a4728c748b3a6",
+    "lens_source_layers": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62
+    ],
+    "jlens_force_bos": false,
+    "model_resolved_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "tokenizer_resolved_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+    "tokenizer_revision_source": "frozen_from_pretrained_argument",
+    "lens_sha256": "1718c8c52dd8a9dad03738d4d625937c1fbba10be325b872ed446c7290fc11e1",
+    "runtime_packages": {
+      "torch": "2.13.0",
+      "transformers": "5.15.1",
+      "jlens": "0.1.0",
+      "huggingface-hub": "1.27.0"
+    }
+  },
+  "config": {
+    "experiment_name": "process_sensitive_replay",
+    "scientific_protocol": "docs/PROCESS_SENSITIVE_REPLAY_IMPLEMENTATION_PLAN.md",
+    "model": {
+      "id": "Qwen/Qwen3.6-27B",
+      "revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+      "tokenizer_revision": "6a9e13bd6fc8f0983b9b99948120bc37f49c13e9",
+      "dtype": "bfloat16",
+      "device_map": "cuda"
+    },
+    "lens": {
+      "repo": "neuronpedia/jacobian-lens",
+      "file": "qwen3.6-27b/jlens/Salesforce-wikitext/Qwen3.6-27B_jacobian_lens_n1000.pt",
+      "revision": "0731326edff4ae730ffc5356fe1a4728c748b3a6",
+      "sha256": "1718c8c52dd8a9dad03738d4d625937c1fbba10be325b872ed446c7290fc11e1",
+      "resident_jacobians": true
+    },
+    "dataset": {
+      "path": "dataset/metacognition.csv",
+      "item_types": [
+        "calibration",
+        "prospective",
+        "knowledge_boundary"
+      ],
+      "expected_items": 82
+    },
+    "layers": {
+      "process": 31,
+      "meta_readout": 40,
+      "readout": [
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44
+      ],
+      "expected_model_layers": 64,
+      "expected_hidden_size": 5120,
+      "expected_process_layer_type": "full_attention"
+    },
+    "conditions": [
+      "clean_preserved",
+      "targeted_weak_preserved",
+      "targeted_strong_preserved",
+      "random_strong_preserved",
+      "support_matched_alternative_preserved",
+      "targeted_strong_reset"
+    ],
+    "split": {
+      "seed": 42,
+      "discovery_counts": {
+        "calibration": 12,
+        "prospective": 2,
+        "knowledge_boundary": 2
+      },
+      "heldout_items": 66
+    },
+    "strengths": {
+      "alpha_grid": [
+        0.01,
+        0.02,
+        0.05,
+        0.1,
+        0.11,
+        0.125,
+        0.15,
+        0.2
+      ],
+      "beta_grid": [
+        0.05,
+        0.1,
+        0.2,
+        0.4,
+        0.8
+      ],
+      "weak_min_median_drop_nat": 0.75,
+      "weak_min_positive_items": 12,
+      "strong_median_drop_range_nat": [
+        2.0,
+        4.0
+      ]
+    },
+    "alternative": {
+      "objective": "predictive_distribution_entropy",
+      "max_abs_cosine_with_answer_gradient": 0.1,
+      "max_median_norm_ratio_to_targeted": 4.0,
+      "fallback": "seeded_gaussian_projected_orthogonal"
+    },
+    "support_matching": {
+      "absolute_tolerance_nat": 0.5,
+      "relative_tolerance": 0.25,
+      "discovery_median_drop_relative_tolerance": 0.25,
+      "heldout_min_item_match_fraction": 0.65,
+      "item_match_requires_positive_targeted_drop": true
+    },
+    "reset_parity": {
+      "absolute_tolerance": 1e-05,
+      "relative_tolerance": 1e-05,
+      "heldout_integrity_stride": 10
+    },
+    "gradient_replay": {
+      "method": "differentiable_token_by_token_recurrent",
+      "reference": "ordinary_cached_token_by_token_recurrent",
+      "functionalize_cache_updates_only": true,
+      "parity_tolerance_source": "reset_parity",
+      "hook_scope": "answer_predictor_positions_only"
+    },
+    "turn3_replay": {
+      "construction": "suffix_only",
+      "frozen_prefix_source": "answer_bank.post_answer_token_ids",
+      "rerender_factual_history": false,
+      "boundary_token": "<|im_end|>",
+      "require_exact_token_hash_parity": true
+    },
+    "smoke": {
+      "item_count": 4,
+      "require_cuda_for_real_model": true
+    },
+    "meta_branches": {
+      "correctness": {
+        "prompt": "Was the factual answer you just gave CORRECT or INCORRECT? Reply exactly CORRECT or INCORRECT.",
+        "labels": [
+          "CORRECT",
+          "INCORRECT"
+        ]
+      },
+      "confidence": {
+        "prompt": "How confident were you in the factual answer you just gave? Reply exactly HIGH_CONFIDENCE or LOW_CONFIDENCE.",
+        "labels": [
+          "HIGH_CONFIDENCE",
+          "LOW_CONFIDENCE"
+        ]
+      }
+    },
+    "readout": {
+      "top_k": 100,
+      "generic_evaluator_token_ids": [
+        97817,
+        99973
+      ]
+    },
+    "candidate_selection": {
+      "primary_branch": "confidence",
+      "max_candidates": 3,
+      "nontrivial_variance_epsilon": 1e-08,
+      "max_support_adjusted_divergence_ratio": 1.0,
+      "dedup_max_abs_direction_cosine": 0.9,
+      "rank_metrics": [
+        "item_centered_support_slope",
+        "targeted_strong_effect",
+        "support_matched_alternative_effect",
+        "targeted_minus_random",
+        "targeted_preserved_minus_reset",
+        "support_adjusted_agreement",
+        "item_sign_consistency"
+      ]
+    },
+    "generation": {
+      "max_answer_tokens": 256,
+      "max_choice_tokens": 8,
+      "do_sample": false,
+      "temperature": 0,
+      "enable_thinking": false,
+      "canonical_assistant_turn_terminator": "<|im_end|>"
+    },
+    "interpretation": {
+      "maximum_claim": "evidence for a process-property / process-sensitive representation; an M(P)-like candidate",
+      "prohibited_claim": "proven higher-order representation without candidate-to-judgment/control causal mediation"
+    }
+  }
+}
