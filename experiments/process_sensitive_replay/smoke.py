@@ -23,6 +23,7 @@ from .gradient_intervention import (
 )
 from .jlens_readout import readout_layers
 from .protocol import item_support_matched, support_match_summary
+from .profiles import gradient_answer_token_limit
 from .replay import (
     QwenReplayAdapter,
     append_meta_prompt,
@@ -215,21 +216,28 @@ def run_smoke_item(
         prefix_length=len(answer["question_prefix_token_ids"]),
         answer_token_ids=answer["answer_token_ids"],
         process_layer=primary_layer,
+        gradient_answer_token_limit=gradient_answer_token_limit(config),
         atol=float(config["reset_parity"]["absolute_tolerance"]),
         rtol=float(config["reset_parity"]["relative_tolerance"]),
     )
     clean = _replay(adapter, answer, None)
     atol = float(config["reset_parity"]["absolute_tolerance"])
     rtol = float(config["reset_parity"]["relative_tolerance"])
-    if not math.isclose(clean.answer_sequence_logp, bundle.answer_sequence_logp, abs_tol=atol, rel_tol=rtol):
+    clean_gradient_support = sum(clean.token_logprobs[: len(bundle.token_logprobs)])
+    if not math.isclose(
+        clean_gradient_support,
+        bundle.answer_sequence_logp,
+        abs_tol=atol,
+        rel_tol=rtol,
+    ):
         raise AssertionError(
             "clean cached support does not match recurrent gradient-pass support: "
-            f"cached={clean.answer_sequence_logp:.9g} "
+            f"cached={clean_gradient_support:.9g} "
             f"gradient={bundle.answer_sequence_logp:.9g} "
-            f"abs_diff={abs(clean.answer_sequence_logp - bundle.answer_sequence_logp):.9g}"
+            f"abs_diff={abs(clean_gradient_support - bundle.answer_sequence_logp):.9g}"
         )
     assert_numeric_parity(
-        torch.tensor(clean.token_logprobs),
+        torch.tensor(clean.token_logprobs[: len(bundle.token_logprobs)]),
         torch.tensor(bundle.token_logprobs),
         atol=atol,
         rtol=rtol,
@@ -296,11 +304,12 @@ def run_smoke_item(
             prefix_length=len(answer["question_prefix_token_ids"]),
             answer_token_ids=answer["answer_token_ids"],
             process_layer=alternative_layer,
+            gradient_answer_token_limit=gradient_answer_token_limit(config),
             atol=atol,
             rtol=rtol,
         )
         if not math.isclose(
-            clean.answer_sequence_logp,
+            sum(clean.token_logprobs[: len(alternative_bundle.token_logprobs)]),
             alternative_bundle.answer_sequence_logp,
             abs_tol=atol,
             rel_tol=rtol,
@@ -309,7 +318,7 @@ def run_smoke_item(
                 f"alternative layer {alternative_layer} recurrent/cached support parity failed"
             )
         assert_numeric_parity(
-            torch.tensor(clean.token_logprobs),
+            torch.tensor(clean.token_logprobs[: len(alternative_bundle.token_logprobs)]),
             torch.tensor(alternative_bundle.token_logprobs),
             atol=atol,
             rtol=rtol,
@@ -758,6 +767,9 @@ def run_smoke_item(
         "phase": phase,
         "gradient": {
             "clean_support": bundle.answer_sequence_logp,
+            "answer_token_limit": gradient_answer_token_limit(config),
+            "gradient_answer_tokens": len(bundle.answer_token_ids),
+            "total_answer_tokens": len(answer["answer_token_ids"]),
             "primary_layer": primary_layer,
             "predictor_positions": list(bundle.predictor_positions),
             "answer_token_ids": list(bundle.answer_token_ids),

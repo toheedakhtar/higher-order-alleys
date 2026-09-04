@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
+from .profiles import PROFILE_NAMES
 from .runner import DEFAULT_CONFIG, SUPPORTED_PHASES
 
 
@@ -21,6 +22,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--hf-cache-dir", type=Path)
+    parser.add_argument(
+        "--profile",
+        choices=PROFILE_NAMES,
+        default="full",
+        help="full confirmatory protocol or reduced exploratory quick profile",
+    )
     return parser.parse_args(argv)
 
 
@@ -35,6 +42,8 @@ def phase_command(args: argparse.Namespace, phase: str) -> list[str]:
         str(args.run_dir),
         "--config",
         str(args.config),
+        "--profile",
+        str(args.profile),
     ]
     if args.hf_cache_dir is not None:
         command.extend(("--hf-cache-dir", str(args.hf_cache_dir)))

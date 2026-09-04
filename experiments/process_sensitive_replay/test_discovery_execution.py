@@ -149,6 +149,7 @@ class DiscoveryExecutionTests(unittest.TestCase):
             return SimpleNamespace(
                 process_layer=process_layer,
                 answer_sequence_logp=-2.0,
+                token_logprobs=(-2.0,),
                 parity={"layer": process_layer},
             )
 
@@ -163,6 +164,7 @@ class DiscoveryExecutionTests(unittest.TestCase):
                     digest="digest", layer_digests=("a",) * 64
                 ),
                 answer_sequence_logp=-2.0,
+                token_logprobs=(-2.0,),
                 process_hook_positions=(),
                 transcript_hash="transcript",
                 question_token_hash="question",

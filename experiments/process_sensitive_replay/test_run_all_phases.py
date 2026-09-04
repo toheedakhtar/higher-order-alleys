@@ -19,6 +19,7 @@ class RunAllPhasesTests(unittest.TestCase):
             run_dir=Path("assets/psr-v9"),
             config=Path("experiments/process_sensitive_replay/experiment_config.json"),
             hf_cache_dir=Path("assets/hf-cache"),
+            profile="quick",
         )
 
     def test_command_forwards_paths_without_a_shell(self) -> None:
@@ -32,6 +33,7 @@ class RunAllPhasesTests(unittest.TestCase):
             Path(command[command.index("--hf-cache-dir") + 1]),
             Path("assets/hf-cache"),
         )
+        self.assertEqual(command[command.index("--profile") + 1], "quick")
 
     def test_complete_campaign_uses_exact_frozen_phase_order(self) -> None:
         with mock.patch(

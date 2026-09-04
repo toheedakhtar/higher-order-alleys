@@ -12,6 +12,7 @@ from experiments.higher_v_readout_global.protocol import (
 )
 
 from .protocol import direct_factual_question, hash_token_ids
+from .cache_state import release_cache_storage
 from .replay import (
     CANONICAL_ASSISTANT_TURN_TERMINATOR,
     QwenReplayAdapter,
@@ -118,7 +119,7 @@ def discover_answer(
     )
     scoring = score_factual_answer(answer, str(row["answer_key"]))
     content_logprobs = token_logprobs[: len(content_ids)]
-    return {
+    result = {
         "item_id": str(row["item_id"]),
         "item_type": str(row["item_type"]),
         "question": question,
@@ -164,3 +165,5 @@ def discover_answer(
             "max_answer_tokens": int(max_answer_tokens),
         },
     }
+    release_cache_storage(cache)
+    return result

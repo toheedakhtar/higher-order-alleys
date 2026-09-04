@@ -43,6 +43,7 @@ The labels below have distinct meanings:
 | `psr-v7` | `freeze` | Secondary orchestration/diagnostic failure | A freeze command issued after invalid discovery reported missing `discovery_vocab_scores.pt` instead of first reporting the failed prerequisite gate. | Freeze ordering was corrected to validate discovery status before loading discovery products. Future attempts report the original `invalid_support_match` prerequisite directly. No frozen protocol was produced. |
 | `psr-v8` | `pre_discovery_smoke` entry | Operational | A repeated invocation was rejected with `phase pre_discovery_smoke already started in this campaign; partial or completed phase outputs cannot be reused`. | The append-only phase guard worked as intended. This message is separate from the subsequent discovery OOM. |
 | `psr-v8` | `discovery` | Implementation/resource-lifetime failure | The alpha grid completed, followed by 12/16 beta-grid items. The next item failed while requesting only 20 MiB: the 94.97-GiB GPU had 5.56 MiB free, with 90.92 GiB allocated and 3.36 GiB reserved but unallocated by PyTorch. | Inspection found redundant primary-gradient computation in beta-only passes and a temporary recurrent-cache bound-method cycle capable of retaining autograd state. Disposable replay/cache lifetimes were also implicit. The correction removes the redundant pass, breaks the cycle, explicitly releases all disposable caches, and adds hash-bound per-item memory measurements plus a fail-closed trend gate. `psr-v8` remains failed diagnostics; start fresh as `psr-v9`. |
+| `psr-v9` | `discovery` | Peak-memory failure | The corrected campaign again exhausted CUDA memory at beta item 12/16. The next item in the deterministic discovery order is a long prospective answer (177 answer tokens in the preserved bank), whereas the preceding calibration answers are four tokens. Cleanup between items therefore did not remove the per-item recurrent-autograd peak. | Added a separate, explicitly exploratory `--profile quick`: 8 discovery and 8 held-out items, reduced grids/readout, one candidate, and a 32-answer-token differentiable window while still teacher-forcing the complete answer into the preserved state. Full `psr-v9` remains failed diagnostics. |
 
 The append-only error streams preserved locally for the last two campaigns are
 [`psr-v6/errors.jsonl`](../assets/psr-v6/errors.jsonl) and
@@ -89,17 +90,17 @@ They did not generate scientific results and were corrected before authorizing
 
 ## Current campaign boundary
 
-`psr-v8` failed during discovery because live CUDA allocations accumulated
-across beta-grid items. It produced no frozen protocol. `psr-v9` is the required
-fresh campaign and retains the same different-layer, same-objective alternative,
-aggregate support-match criteria, held-out 65% item-level criterion, and every
-other fail-closed scientific gate. Only execution lifetime and monitoring were
-changed; no adaptive beta search was introduced.
+`psr-v9` also failed during discovery at the first long-answer beta item and
+produced no frozen protocol. The full confirmatory protocol remains blocked on
+the CUDA peak. The new quick profile is a separate exploratory protocol, not a
+continuation or relaxation of the failed full campaign. It retains the causal
+conditions and validity gates while trading population coverage and statistical
+power for bounded gradient memory and substantially lower runtime.
 
 The local CPU/unit suite passes, but this does not authorize discovery or
 held-out execution. The required order remains:
 
-1. fresh CUDA `validate` and `answer_bank`;
+1. fresh CUDA `validate` and `answer_bank` in a new quick campaign directory;
 2. pre-discovery engineering smoke;
 3. discovery and freeze;
 4. post-freeze critical smoke with frozen strengths;

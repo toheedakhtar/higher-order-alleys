@@ -15,6 +15,7 @@ from .gradient_intervention import (
     build_interventions,
     compute_clean_gradients,
 )
+from .profiles import gradient_answer_token_limit
 from .replay import replay_teacher_forced
 
 
@@ -269,13 +270,14 @@ def measure_strength_grid_item(
             prefix_length=len(answer["question_prefix_token_ids"]),
             answer_token_ids=answer["answer_token_ids"],
             process_layer=primary_layer,
+            gradient_answer_token_limit=gradient_answer_token_limit(config),
             atol=atol,
             rtol=rtol,
         )
     clean = _replay(adapter, answer, None)
     if bundle is not None:
         if not math.isclose(
-            clean.answer_sequence_logp,
+            sum(clean.token_logprobs[: len(bundle.token_logprobs)]),
             bundle.answer_sequence_logp,
             abs_tol=atol,
             rel_tol=rtol,
@@ -340,11 +342,12 @@ def measure_strength_grid_item(
                 prefix_length=len(answer["question_prefix_token_ids"]),
                 answer_token_ids=answer["answer_token_ids"],
                 process_layer=alternative_layer,
+                gradient_answer_token_limit=gradient_answer_token_limit(config),
                 atol=atol,
                 rtol=rtol,
             )
             if not math.isclose(
-                clean.answer_sequence_logp,
+                sum(clean.token_logprobs[: len(alternative_bundle.token_logprobs)]),
                 alternative_bundle.answer_sequence_logp,
                 abs_tol=atol,
                 rel_tol=rtol,
@@ -390,6 +393,8 @@ def measure_strength_grid_item(
         "question_token_hash": clean.question_token_hash,
         "answer_token_hash": clean.answer_token_hash,
         "gradient_parity": None if bundle is None else bundle.parity,
+        "gradient_answer_token_limit": gradient_answer_token_limit(config),
+        "total_answer_tokens": len(answer["answer_token_ids"]),
         "alternative_gradient_parity": alternative_gradient_parity,
         "alpha_grid": alpha_grid,
         "beta_grid": beta_grid,

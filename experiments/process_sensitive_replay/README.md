@@ -53,6 +53,37 @@ lifetime, removing a redundant primary-gradient pass, and enforcing hash-bound
 per-item CUDA-memory logging. Start a fresh `assets/psr-v9` campaign on the same
 CUDA host:
 
+The subsequent `psr-v9` attempt still exhausted CUDA memory at the transition
+to the first long-answer beta item. This shows that deterministic cleanup did
+not solve the peak-memory cost of a long recurrent autograd graph.
+
+## Quick exploratory profile
+
+Use the quick profile when the full campaign is too expensive or hits the
+long-answer beta-grid peak:
+
+```bash
+python -m experiments.process_sensitive_replay.run_all_phases \
+  --profile quick \
+  --run-dir assets/psr-quick-v1
+```
+
+The profile retains all seven causal conditions, both meta branches, all three
+alternative layers, exact transcript/cache/reset gates, candidate discovery,
+support matching, and held-out analysis. It reduces the campaign to eight
+predeclared discovery and eight held-out items, two alpha values, three beta
+values, layers 38/40/42 for J-Lens readout, and one frozen candidate. For long
+answers, the differentiable answer-support objective and intervention positions
+are restricted to the first 32 answer tokens; the complete answer is still
+teacher-forced and its resulting state is preserved into Turn 3.
+
+This usually cuts both runtime and peak autograd memory by a large factor while
+answering the same mechanistic questions. It is explicitly exploratory and has
+less statistical power and weaker population coverage than the full protocol.
+Its reports are watermarked accordingly and cannot be presented as a substitute
+for the full confirmatory campaign. A quick and full campaign must always use
+different fresh run directories.
+
 To run the complete campaign with automatic fail-closed phase sequencing, use:
 
 ```bash

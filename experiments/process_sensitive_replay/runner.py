@@ -61,6 +61,7 @@ from .protocol import (
     validate_config,
     write_gate,
 )
+from .profiles import PROFILE_NAMES, profile_name, resolve_execution_profile
 from .replay import QwenReplayAdapter, verify_thinking_disabled
 from .smoke import run_smoke_item, summarize_smoke
 
@@ -165,7 +166,7 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def initialize_run_dir(run_dir: Path, config_path: Path, config: Mapping[str, Any]) -> None:
+def initialize_run_dir(run_dir: Path, config: Mapping[str, Any]) -> None:
     run_dir.mkdir(parents=True, exist_ok=True)
     for name in LOG_FILES:
         (run_dir / name).touch(exist_ok=True)
@@ -202,12 +203,13 @@ def code_hash() -> str:
     return sha256_json({str(path.name): sha256_file(path) for path in files})
 
 
-def campaign_hashes(config_path: Path, config: Mapping[str, Any]) -> dict[str, str]:
+def campaign_hashes(config: Mapping[str, Any]) -> dict[str, str]:
     dataset_path = REPO_ROOT / str(config["dataset"]["path"])
     protocol_path = REPO_ROOT / str(config["scientific_protocol"])
     packages = package_versions(RUNTIME_PACKAGE_NAMES)
     return {
-        "config": sha256_file(config_path),
+        # Bind the resolved profile, not only the source JSON file.
+        "config": sha256_json(config),
         "dataset": sha256_file(dataset_path),
         "scientific_protocol": sha256_file(protocol_path),
         "code": code_hash(),
@@ -249,6 +251,7 @@ def write_manifest(
     manifest = {
         **previous,
         "experiment_name": "process_sensitive_replay",
+        "execution_profile": profile_name(config),
         "campaign_created_at": previous.get("campaign_created_at", utc_now()),
         "updated_at": utc_now(),
         "active_phase": phase,
@@ -512,7 +515,6 @@ def _log_smoke_record(run_dir: Path, record: Mapping[str, Any]) -> None:
 
 def run_validate(
     run_dir: Path,
-    config_path: Path,
     config: Mapping[str, Any],
     hashes: Mapping[str, str],
 ) -> dict[str, Any]:
@@ -546,6 +548,12 @@ def run_answer_bank_phase(
     )
     write_manifest(run_dir, phase=phase, status="running", config=config, hashes=hashes, runtime=runtime)
     rows = load_dataset(REPO_ROOT / config["dataset"]["path"], config["dataset"]["item_types"])
+    selected_ids = config.get("execution_profile", {}).get("selected_item_ids")
+    if selected_ids is not None:
+        selected = {str(value) for value in selected_ids}
+        rows = [row for row in rows if str(row["item_id"]) in selected]
+        if {str(row["item_id"]) for row in rows} != selected:
+            raise RuntimeError("execution profile selected missing dataset item IDs")
     thinking_examples = []
     for item_type in config["dataset"]["item_types"]:
         row = next(candidate for candidate in rows if candidate["item_type"] == item_type)
@@ -911,7 +919,10 @@ def run_discovery_phase(
     )
     discovery_ids = [str(value) for value in split["discovery_item_ids"]]
     heldout_ids = {str(value) for value in split["heldout_item_ids"]}
-    if len(discovery_ids) != 16 or set(discovery_ids) & heldout_ids:
+    expected_discovery = sum(
+        int(value) for value in config["split"]["discovery_counts"].values()
+    )
+    if len(discovery_ids) != expected_discovery or set(discovery_ids) & heldout_ids:
         raise AssertionError("candidate discovery split isolation failed")
     by_id = {str(record["item_id"]): record for record in answers}
     if any(item_id not in by_id or bool(by_id[item_id].get("invalid")) for item_id in discovery_ids):
@@ -1305,6 +1316,7 @@ def run_discovery_phase(
     discovery_payload = {
         "schema_version": 1,
         "experiment_name": "process_sensitive_replay",
+        "execution_profile": profile_name(config),
         "discovery_item_ids": discovery_ids,
         "heldout_item_ids_accessed": [],
         "source_hashes": dict(hashes),
@@ -1394,6 +1406,7 @@ def run_freeze_phase(
     frozen = {
         "schema_version": 1,
         "experiment_name": "process_sensitive_replay",
+        "execution_profile": profile_name(config),
         "frozen_at": utc_now(),
         "source_hashes": source_hashes,
         "discovery_item_ids": [str(value) for value in split["discovery_item_ids"]],
@@ -1692,6 +1705,7 @@ def render_results_markdown(
     *,
     heldout_items: int,
     alternative_layer: int | None = None,
+    execution_profile: str = "full",
 ) -> str:
     lines = [
         "# Process-sensitive replay held-out results",
@@ -1699,6 +1713,7 @@ def render_results_markdown(
         f"Held-out items: {heldout_items}",
         "Primary intervention layer: 31",
         f"Frozen alternative intervention layer: {alternative_layer}",
+        f"Execution profile: {execution_profile}",
         "",
         (
             "Support-match gate: **PASSED** "
@@ -1723,6 +1738,13 @@ def render_results_markdown(
         "## H1–H7 and control contrasts",
         "",
     ]
+    if execution_profile != "full":
+        lines[1:1] = [
+            "",
+            "> **EXPLORATORY QUICK PROFILE:** reduced items, grids, readout layers, "
+            "and a bounded gradient objective. These results are not a substitute "
+            "for the full confirmatory campaign.",
+        ]
     for statistic in candidate_statistics:
         label = (
             str(statistic["candidate_label"])
@@ -1872,6 +1894,8 @@ def run_analyze_phase(
     )
     report = {
         "schema_version": 1,
+        "execution_profile": profile_name(config),
+        "exploratory": profile_name(config) != "full",
         "heldout_items": len(heldout_ids),
         "support_matching": support_summary,
         "alternative_layer": int(frozen["alternative_layer"]),
@@ -1905,6 +1929,7 @@ def run_analyze_phase(
             support_summary,
             heldout_items=len(heldout_ids),
             alternative_layer=int(frozen["alternative_layer"]),
+            execution_profile=profile_name(config),
         ),
         encoding="utf-8",
     )
@@ -1951,6 +1976,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--hf-cache-dir", type=Path)
+    parser.add_argument("--profile", choices=PROFILE_NAMES, default="full")
     return parser.parse_args(argv)
 
 
@@ -1958,9 +1984,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     config_path = args.config.resolve()
     run_dir = args.run_dir.resolve()
-    config = load_config(config_path)
-    initialize_run_dir(run_dir, config_path, config)
-    hashes = campaign_hashes(config_path, config)
+    config = resolve_execution_profile(load_config(config_path), args.profile)
+    initialize_run_dir(run_dir, config)
+    hashes = campaign_hashes(config)
     protocol_hash = combined_protocol_hash(hashes)
     logger = logging.getLogger("process_sensitive_replay")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
@@ -1972,7 +1998,7 @@ def main(argv: list[str] | None = None) -> int:
     write_manifest(run_dir, phase=args.phase, status="initializing", config=config, hashes=hashes)
     try:
         if args.phase == "validate":
-            result = run_validate(run_dir, config_path, config, hashes)
+            result = run_validate(run_dir, config, hashes)
         elif args.phase == "answer_bank":
             result = run_answer_bank_phase(args, run_dir, config, hashes)
         elif args.phase == "discovery":

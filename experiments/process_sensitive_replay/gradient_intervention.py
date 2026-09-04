@@ -355,10 +355,16 @@ def compute_clean_gradients(
     prefix_length: int,
     answer_token_ids: Sequence[int],
     process_layer: int,
+    gradient_answer_token_limit: int | None = None,
     atol: float = 1e-5,
     rtol: float = 1e-5,
 ) -> GradientBundle:
-    positions = answer_predictor_positions(prefix_length, len(answer_token_ids))
+    gradient_answer_ids = tuple(int(value) for value in answer_token_ids)
+    if gradient_answer_token_limit is not None:
+        if int(gradient_answer_token_limit) <= 0:
+            raise ValueError("gradient_answer_token_limit must be positive")
+        gradient_answer_ids = gradient_answer_ids[: int(gradient_answer_token_limit)]
+    positions = answer_predictor_positions(prefix_length, len(gradient_answer_ids))
     ids = torch.tensor([list(post_answer_token_ids)], dtype=torch.long)
     adapter.hf_model.requires_grad_(False)
     (
@@ -371,7 +377,7 @@ def compute_clean_gradients(
         adapter,
         ids,
         positions,
-        answer_token_ids,
+        gradient_answer_ids,
         process_layer,
         atol=float(atol),
         rtol=float(rtol),
@@ -383,7 +389,7 @@ def compute_clean_gradients(
         raise RuntimeError("answer-support gradient is non-finite or degenerate")
     return GradientBundle(
         predictor_positions=positions,
-        answer_token_ids=tuple(int(value) for value in answer_token_ids),
+        answer_token_ids=gradient_answer_ids,
         answer_sequence_logp=support,
         answer_gradients=answer_gradient,
         clean_residuals=residuals,

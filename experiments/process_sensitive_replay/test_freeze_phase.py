@@ -24,8 +24,8 @@ class FreezePhaseTests(unittest.TestCase):
         config = load_config(CONFIG_PATH)
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
-            initialize_run_dir(run_dir, CONFIG_PATH, config)
-            hashes = campaign_hashes(CONFIG_PATH, config)
+            initialize_run_dir(run_dir, config)
+            hashes = campaign_hashes(config)
             write_gate(run_dir, GateStatus(
                 phase="discovery",
                 status="invalid_support_match",
@@ -45,7 +45,7 @@ class FreezePhaseTests(unittest.TestCase):
         config = load_config(CONFIG_PATH)
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
-            initialize_run_dir(run_dir, CONFIG_PATH, config)
+            initialize_run_dir(run_dir, config)
             (run_dir / "answer_bank.jsonl").write_text("{}\n", encoding="utf-8")
             split = {
                 "discovery_item_ids": [str(value) for value in range(16)],
@@ -87,7 +87,7 @@ class FreezePhaseTests(unittest.TestCase):
             direction = directions / "candidate.pt"
             direction.write_bytes(b"direction")
 
-            hashes = campaign_hashes(CONFIG_PATH, config)
+            hashes = campaign_hashes(config)
             _load_campaign_inputs(run_dir, hashes)
             _load_pre_discovery_smoke_hash(run_dir, hashes)
             from experiments.process_sensitive_replay.protocol import sha256_file
@@ -154,7 +154,7 @@ class FreezePhaseTests(unittest.TestCase):
             ))
 
             result = run_freeze_phase(
-                run_dir, config, campaign_hashes(CONFIG_PATH, config)
+                run_dir, config, campaign_hashes(config)
             )
 
             self.assertEqual(result["candidate_count"], 1)

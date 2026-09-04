@@ -13,6 +13,13 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Iterable, Mapping, Sequence
 
+from .profiles import (
+    QUICK_DISCOVERY_ITEM_IDS,
+    QUICK_HELDOUT_ITEM_IDS,
+    gradient_answer_token_limit,
+    profile_name,
+)
+
 
 PHASE_DEPENDENCIES: dict[str, tuple[str, ...]] = {
     "validate": (),
@@ -97,6 +104,9 @@ def direct_factual_question(row: Mapping[str, str]) -> str:
 
 
 def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[str, str]]) -> dict[str, Any]:
+    execution_profile = profile_name(config)
+    if execution_profile not in {"full", "quick"}:
+        raise ValueError(f"unsupported execution profile {execution_profile!r}")
     if config.get("experiment_name") != "process_sensitive_replay":
         raise ValueError("experiment name changed")
     if tuple(config.get("conditions", ())) != EXPECTED_CONDITIONS:
@@ -135,17 +145,27 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
         or layers.get("expected_alternative_layer_type") != "full_attention"
     ):
         raise ValueError("frozen intervention-layer architecture contract changed")
-    if list(layers["readout"]) != list(range(36, 45)):
-        raise ValueError("frozen J-Lens readout layers changed")
+    expected_readout = (
+        list(range(36, 45)) if execution_profile == "full" else [38, 40, 42]
+    )
+    if list(layers["readout"]) != expected_readout:
+        raise ValueError("execution-profile J-Lens readout layers changed")
     strengths = config["strengths"]
-    if [float(value) for value in strengths["alpha_grid"]] != [
-        0.01, 0.02, 0.05, 0.1, 0.11, 0.125, 0.15, 0.2
-    ]:
-        raise ValueError("declared psr-v8 alpha grid changed")
-    if [float(value) for value in strengths["beta_grid"]] != [
-        0.05, 0.08, 0.1, 0.11, 0.125, 0.15, 0.2, 0.3, 0.4
-    ]:
-        raise ValueError("declared psr-v8 beta grid changed")
+    expected_alpha = (
+        [0.01, 0.02, 0.05, 0.1, 0.11, 0.125, 0.15, 0.2]
+        if execution_profile == "full" else [0.1, 0.11]
+    )
+    expected_beta = (
+        [0.05, 0.08, 0.1, 0.11, 0.125, 0.15, 0.2, 0.3, 0.4]
+        if execution_profile == "full" else [0.1, 0.2, 0.3]
+    )
+    if [float(value) for value in strengths["alpha_grid"]] != expected_alpha:
+        raise ValueError("execution-profile alpha grid changed")
+    if [float(value) for value in strengths["beta_grid"]] != expected_beta:
+        raise ValueError("execution-profile beta grid changed")
+    expected_positive_items = 12 if execution_profile == "full" else 6
+    if int(strengths["weak_min_positive_items"]) != expected_positive_items:
+        raise ValueError("execution-profile weak-positive-item gate changed")
     alternative = config["alternative"]
     if alternative != {
         "objective": "full_answer_sequence_log_probability",
@@ -203,9 +223,9 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
     }:
         raise ValueError("fail-closed CUDA memory-lifetime contract changed")
     candidate_selection = config["candidate_selection"]
-    if candidate_selection != {
+    expected_candidate_selection = {
         "primary_branch": "confidence",
-        "max_candidates": 3,
+        "max_candidates": 3 if execution_profile == "full" else 1,
         "nontrivial_variance_epsilon": 1e-8,
         "max_support_adjusted_divergence_ratio": 1.0,
         "dedup_max_abs_direction_cosine": 0.9,
@@ -219,7 +239,8 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
             "support_adjusted_agreement",
             "item_sign_consistency",
         ],
-    }:
+    }
+    if candidate_selection != expected_candidate_selection:
         raise ValueError("frozen candidate-selection contract changed")
     if len(dataset_rows) != int(config["dataset"]["expected_items"]):
         raise ValueError(f"expected 82 factual items, found {len(dataset_rows)}")
@@ -230,12 +251,53 @@ def validate_config(config: Mapping[str, Any], dataset_rows: Sequence[Mapping[st
     expected_counts = {"calibration": 66, "prospective": 8, "knowledge_boundary": 8}
     if counts != expected_counts:
         raise ValueError(f"dataset type counts changed: {counts}")
+    if execution_profile == "quick":
+        execution = config.get("execution_profile", {})
+        expected_ids = [*QUICK_DISCOVERY_ITEM_IDS, *QUICK_HELDOUT_ITEM_IDS]
+        if execution.get("exploratory") is not True:
+            raise ValueError("quick profile must be marked exploratory")
+        if [
+            str(value) for value in execution.get("selected_item_ids", ())
+        ] != expected_ids:
+            raise ValueError("quick profile item set changed")
+        if gradient_answer_token_limit(config) != 32:
+            raise ValueError("quick profile gradient token limit changed")
+        if execution.get("claim_ceiling") != (
+            "exploratory mechanistic evidence; not confirmatory"
+        ):
+            raise ValueError("quick profile claim ceiling changed")
+        if int(config["smoke"]["item_count"]) != 2:
+            raise ValueError("quick profile smoke item count changed")
+        if int(config["readout"]["top_k"]) != 25:
+            raise ValueError("quick profile readout top-k changed")
+        if config["split"]["discovery_counts"] != {
+            "calibration": 6,
+            "prospective": 1,
+            "knowledge_boundary": 1,
+        }:
+            raise ValueError("quick profile discovery counts changed")
+        if int(config["split"]["heldout_items"]) != len(QUICK_HELDOUT_ITEM_IDS):
+            raise ValueError("quick profile held-out count changed")
+        if [
+            str(value)
+            for value in config["split"].get("explicit_discovery_item_ids", ())
+        ] != list(QUICK_DISCOVERY_ITEM_IDS):
+            raise ValueError("quick profile discovery IDs changed")
+        if [
+            str(value)
+            for value in config["split"].get("explicit_heldout_item_ids", ())
+        ] != list(QUICK_HELDOUT_ITEM_IDS):
+            raise ValueError("quick profile held-out IDs changed")
     if set(PHASE_DEPENDENCIES) != {
         "validate", "answer_bank", "pre_discovery_smoke", "discovery",
         "freeze", "post_freeze_smoke", "heldout", "analyze",
     }:
         raise AssertionError("phase dependency graph changed")
-    return {"item_count": len(dataset_rows), "item_type_counts": counts}
+    return {
+        "item_count": len(dataset_rows),
+        "item_type_counts": counts,
+        "execution_profile": execution_profile,
+    }
 
 
 def _balanced_sample(
@@ -261,9 +323,39 @@ def _balanced_sample(
 def allocate_discovery_split(
     answer_rows: Sequence[Mapping[str, Any]], config: Mapping[str, Any]
 ) -> dict[str, list[str]]:
-    rng = random.Random(int(config["split"]["seed"]))
+    split_config = config["split"]
+    explicit_discovery = split_config.get("explicit_discovery_item_ids")
+    explicit_heldout = split_config.get("explicit_heldout_item_ids")
+    if explicit_discovery is not None or explicit_heldout is not None:
+        if explicit_discovery is None or explicit_heldout is None:
+            raise ValueError("explicit split must define both discovery and held-out IDs")
+        by_id = {str(row["item_id"]): row for row in answer_rows}
+        discovery = [str(value) for value in explicit_discovery]
+        heldout = [str(value) for value in explicit_heldout]
+        selected = discovery + heldout
+        if len(set(selected)) != len(selected):
+            raise ValueError("explicit split contains duplicate or overlapping item IDs")
+        missing = [item_id for item_id in selected if item_id not in by_id]
+        invalid = [
+            item_id
+            for item_id in selected
+            if item_id in by_id and by_id[item_id].get("invalid", False)
+        ]
+        if missing or invalid:
+            raise ValueError(
+                f"explicit split has missing IDs {missing} or invalid answers {invalid}"
+            )
+        return {
+            "discovery_item_ids": discovery,
+            "heldout_item_ids": heldout,
+            "excluded_invalid_item_ids": sorted(
+                str(row["item_id"]) for row in answer_rows if row.get("invalid", False)
+            ),
+        }
+
+    rng = random.Random(int(split_config["seed"]))
     chosen: list[Mapping[str, Any]] = []
-    for item_type, count in config["split"]["discovery_counts"].items():
+    for item_type, count in split_config["discovery_counts"].items():
         pool = [row for row in answer_rows if row["item_type"] == item_type and not row.get("invalid", False)]
         try:
             chosen.extend(_balanced_sample(pool, int(count), rng))
@@ -280,9 +372,12 @@ def allocate_discovery_split(
         str(row["item_id"]) for row in answer_rows if row.get("invalid", False)
     )
     heldout = sorted(set(valid_item_ids) - set(discovery))
-    if len(discovery) != 16:
-        raise ValueError(f"expected 16 discovery items, found {len(discovery)}")
-    maximum_heldout = int(config["split"]["heldout_items"])
+    expected_discovery = sum(
+        int(value) for value in split_config["discovery_counts"].values()
+    )
+    if len(discovery) != expected_discovery:
+        raise ValueError(f"expected {expected_discovery} discovery items, found {len(discovery)}")
+    maximum_heldout = int(split_config["heldout_items"])
     if len(heldout) > maximum_heldout:
         raise ValueError(
             f"held-out assignments exceed frozen maximum {maximum_heldout}: {len(heldout)}"
@@ -375,9 +470,14 @@ def validate_frozen_protocol(
         raise ValueError("unsupported frozen protocol schema")
     if frozen.get("experiment_name") != "process_sensitive_replay":
         raise ValueError("frozen protocol experiment changed")
+    if frozen.get("execution_profile", "full") != profile_name(config):
+        raise ValueError("frozen protocol execution profile changed")
     discovery_ids = [str(value) for value in frozen.get("discovery_item_ids", ())]
     expected_discovery = [str(value) for value in split["discovery_item_ids"]]
-    if discovery_ids != expected_discovery or len(discovery_ids) != 16:
+    expected_count = sum(
+        int(value) for value in config["split"]["discovery_counts"].values()
+    )
+    if discovery_ids != expected_discovery or len(discovery_ids) != expected_count:
         raise ValueError("frozen protocol discovery split changed")
     heldout = {str(value) for value in split["heldout_item_ids"]}
     if set(discovery_ids) & heldout:

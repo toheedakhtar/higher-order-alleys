@@ -38,6 +38,15 @@ See each experiment's README for pilot, full-run, resume, output-root, and
 analysis commands. Runs default to that experiment's `results/` directory;
 override this with `--output-root PATH`.
 
+For the reduced process-sensitive replay campaign:
+
+```powershell
+python -m experiments.process_sensitive_replay.run_all_phases --profile quick --run-dir assets/psr-quick-v1
+```
+
+The quick profile preserves the causal/control structure but is exploratory and
+has lower statistical power than the full protocol.
+
 The documents in `docs/` include historical predecessor context. Current
 operational paths and commands are defined by this README and the experiment
 README.

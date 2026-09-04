@@ -141,7 +141,7 @@ class SmokeGateTests(unittest.TestCase):
                         args,
                         run_dir,
                         self.config,
-                        campaign_hashes(CONFIG_PATH, self.config),
+                        campaign_hashes(self.config),
                     )
             report_path = run_dir / "post_freeze_smoke" / "smoke_report.json"
             self.assertTrue(report_path.is_file())

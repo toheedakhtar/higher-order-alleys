@@ -43,7 +43,7 @@ class PostFreezePipelineTests(unittest.TestCase):
         self.assertIn("analyze", SUPPORTED_PHASES)
 
     def test_campaign_hashes_bind_runtime_and_checkpoint_identities(self) -> None:
-        hashes = campaign_hashes(CONFIG_PATH, self.config)
+        hashes = campaign_hashes(self.config)
         self.assertEqual(
             hashes["model_revision"], self.config["model"]["revision"]
         )
@@ -229,7 +229,7 @@ class PostFreezePipelineTests(unittest.TestCase):
     def test_heldout_and_analysis_execute_after_hash_gated_post_freeze_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             run_dir = Path(temporary)
-            initialize_run_dir(run_dir, CONFIG_PATH, self.config)
+            initialize_run_dir(run_dir, self.config)
             answers = [
                 {"item_id": str(item), "invalid": False} for item in range(18)
             ]
@@ -271,7 +271,7 @@ class PostFreezePipelineTests(unittest.TestCase):
             direction = directions / "candidate.pt"
             direction.write_bytes(b"direction")
 
-            hashes = campaign_hashes(CONFIG_PATH, self.config)
+            hashes = campaign_hashes(self.config)
             _load_campaign_inputs(run_dir, hashes)
             _load_pre_discovery_smoke_hash(run_dir, hashes)
             _load_discovery_hashes(run_dir, hashes)
@@ -351,7 +351,7 @@ class PostFreezePipelineTests(unittest.TestCase):
                 ),
             ):
                 heldout = run_heldout_phase(
-                    args, run_dir, self.config, campaign_hashes(CONFIG_PATH, self.config)
+                    args, run_dir, self.config, campaign_hashes(self.config)
                 )
             self.assertEqual(heldout["heldout_items"], 2)
             self.assertTrue((run_dir / "heldout_effects.csv").is_file())
@@ -359,7 +359,7 @@ class PostFreezePipelineTests(unittest.TestCase):
 
             (run_dir / "analyze").mkdir()
             analyzed = run_analyze_phase(
-                run_dir, self.config, campaign_hashes(CONFIG_PATH, self.config)
+                run_dir, self.config, campaign_hashes(self.config)
             )
             self.assertEqual(analyzed["plot_count"], 15)
             self.assertTrue((run_dir / "analyze" / "RESULTS.md").is_file())
