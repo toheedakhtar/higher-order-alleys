@@ -472,6 +472,21 @@ or selected using desired outcomes from this sprint.
 
 ## Related records
 
+The saved layer-42 residual states can be visualized in coordinates anchored to
+the exact frozen candidate direction:
+
+```bash
+python -m experiments.process_sensitive_replay.plot_candidate_anchored_latents \
+  --run-dir assets/psr-mediation-precision-blackwell-v1
+```
+
+The script uses the candidate coordinate as one axis and derives the remaining
+axes only from candidate-orthogonal process changes. It writes a publication
+PNG/PDF plus projected coordinates and metadata to `docs/figures/`. Because raw
+residuals were retained only by the qualification smoke, this visualization is
+limited to items 0 and 2; it must not be presented as an eight-item latent-space
+result.
+
 - [First-order vs. higher-order research sprint](E2SUM_first_order_vs_higher_order_research_sprint.md)
 - [Causal mediation implementation and handoff](CAUSAL_MEDIATION_IMPLEMENTATION.md)
 - [Mixed-precision policy and qualification design](MIXED_PRECISION_MEDIATION_POLICY.md)
