@@ -1,8 +1,9 @@
 # Mixed-precision mediation qualification
 
-Status: **implemented for two-item qualification; full-model CUDA validation and
-equivalence approval are pending. No eight-item experiment is authorized or
-exposed by this runner.**
+Status: **qualification failed and this route is closed.** The Blackwell run
+preserved generated labels and passed patch geometry, but exceeded the proposed
+no-patch equivalence limits. No eight-item experiment was authorized or exposed
+by this runner. See [the final results](CAUSAL_MEDIATION_FINAL_RESULTS.md).
 
 This extends [the experiment implementation](CAUSAL_MEDIATION_IMPLEMENTATION.md).
 The BF16-native approach is closed under its frozen criteria: the supplied
@@ -158,10 +159,12 @@ Exceeding proposed limits stops progress; meeting them produces only
 Do not widen limits automatically after seeing results. Inspect and approve the
 criterion explicitly before an eight-item experiment could be implemented/run.
 
-## Local validation and the remaining CUDA run
+## Local validation and reproducibility command
 
-Local validation uses CPU-only synthetic weights and the actual Qwen hybrid
-forward implementation. It cannot establish full-model BF16/FP32 equivalence.
+Local validation used CPU-only synthetic weights and the actual Qwen hybrid
+forward implementation. It could not establish full-model BF16/FP32 equivalence;
+that question was subsequently measured by the Blackwell run reported in the
+[final results](CAUSAL_MEDIATION_FINAL_RESULTS.md).
 The existing 11 BF16 tests and six new mixed-policy tests pass. Coverage includes
 complete multi-token scoring, exact pre-tail state identity, active downstream
 patching, sham equality, source-cache isolation, restoration of original weight
@@ -175,7 +178,7 @@ All 18 pass. Maximum relative coordinate error is **0.3762%**; maximum absolute
 orthogonal leakage is **0.00018232**, within its arithmetic noise bound. These
 are synthetic results, not measurements on the two real items.
 
-On the original Blackwell environment, use a fresh directory:
+The completed Blackwell qualification can be reproduced in a fresh directory:
 
 ```bash
 python -m experiments.causal_mediation.mixed_smoke \

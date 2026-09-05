@@ -2,6 +2,9 @@
 
 Last updated: 2026-09-05
 
+Final outcome: both qualified intervention routes closed before behavioral
+mediation. See [Causal mediation follow-up: final results and sprint endpoint](CAUSAL_MEDIATION_FINAL_RESULTS.md).
+
 ## Current status
 
 The package is [`experiments/causal_mediation/`](../experiments/causal_mediation/).
@@ -9,15 +12,15 @@ The BF16-native smoke subsequently ran on Blackwell: support reproduction passed
 exactly, but orthogonal leakage failed with certified infeasibility. That policy
 is closed under its frozen criteria, without a scientific mediation result.
 
-The user has now authorized **one mixed-precision qualification policy**. Its
-implementation, validation, proposed equivalence limits and current command are
-documented in [Mixed-precision mediation qualification](MIXED_PRECISION_MEDIATION_POLICY.md).
-The full-model mixed-precision smoke remains pending on CUDA; this workspace has
-CPU-only PyTorch. The eight-item mediation runner, behavioral analysis and final
-scientific plots remain unimplemented and unauthorized at this stage.
+The subsequently authorized mixed-precision qualification is documented in
+[Mixed-precision mediation qualification](MIXED_PRECISION_MEDIATION_POLICY.md).
+Its Blackwell run passed patch geometry but failed no-patch equivalence because
+the FP32 tail materially altered the quantitative judgments. The eight-item
+mediation runner, behavioral analysis and final scientific plots were therefore
+not implemented or authorized.
 
-The remaining sections preserve the original BF16 implementation handoff. For
-the current precision stage, use the mixed-precision document linked above.
+The remaining sections preserve the original BF16 implementation handoff. Use
+the final-results document for the concluded scientific status.
 
 ## Scientific purpose
 

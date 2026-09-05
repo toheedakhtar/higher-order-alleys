@@ -1,5 +1,11 @@
 # Research Sprint Summary: First-Order Readout vs Higher-Order Representation in LLMs
 
+> **Final causal-follow-up status (2026-09-05):** Both intervention routes
+> failed their predeclared engineering qualification gates before mediation
+> outcomes were measured. The sprint therefore ends with exploratory evidence
+> for `P -> R(P)` and causal higher-order mediation unresolved. See
+> [the final causal mediation results](CAUSAL_MEDIATION_FINAL_RESULTS.md).
+
 ## 1. Core problem
 
 The sprint asks whether an LLM merely **reads out information from its ordinary first-order computation**, or whether it forms a later representation **of that computation itself**.
@@ -492,4 +498,3 @@ This summary is based on the sprint's experiment/result artifacts, especially:
 - quick-vs-full profile specification;
 - quick held-out process-sensitive replay results;
 - associated implementation/audit history.
-

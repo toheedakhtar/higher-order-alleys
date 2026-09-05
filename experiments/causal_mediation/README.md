@@ -1,9 +1,13 @@
 # Candidate mediation: precision qualification
 
-**Status: mixed-precision qualification implemented; real CUDA equivalence
-validation and approval pending. The eight-item experiment remains unavailable.**
+**Status: both intervention qualifications failed and the sprint is closed. The
+eight-item experiment remains unavailable.**
 The Blackwell BF16-native smoke reproduced support exactly but failed leakage
 with certified infeasibility. That approach is closed under its frozen criteria.
+
+The Blackwell mixed-precision smoke then passed patch geometry but failed its
+no-patch equivalence limits. No nonzero patch was evaluated behaviorally. See
+[the final results](../../docs/CAUSAL_MEDIATION_FINAL_RESULTS.md).
 
 See [the current FP32-tail policy and run command](../../docs/MIXED_PRECISION_MEDIATION_POLICY.md).
 `mixed_smoke` exposes only items 0 and 2 and never computes patched judgments.
@@ -176,10 +180,9 @@ The smoke runner:
   Even successful numerical smoke is labeled **pending review** and creates
   no mediation success marker or eight-item execution path.
 
-## Required next decision
+## Final decision
 
-Inspect both real numerical smoke items before approving the proposed precision
-criterion. If their natural candidate changes cannot meet the coordinate and
-leakage budgets, stop. Do not loosen global parity, omit items, amplify targets,
-or switch to a mixed-precision tail automatically. The complete causal runner
-remains pending this numerical qualification and review.
+The real smoke items established that the BF16 lattice cannot meet the frozen
+leakage criterion. The separately approved FP32 tail materially changed the
+unpatched downstream judgments. Do not loosen thresholds or add another patch
+scheme within this sprint. Any future attempt is a new preregistered experiment.
