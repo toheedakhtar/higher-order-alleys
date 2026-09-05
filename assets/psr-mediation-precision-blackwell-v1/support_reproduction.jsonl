@@ -1,0 +1,4 @@
+{"item_id": "0", "mechanism": "primary", "original_drop": 2.125924800486814, "recomputed_drop": 2.125924800486814, "absolute_error": 0.0, "passed": true}
+{"item_id": "0", "mechanism": "alternative", "original_drop": 2.236915813007613, "recomputed_drop": 2.236915813007613, "absolute_error": 0.0, "passed": true}
+{"item_id": "2", "mechanism": "primary", "original_drop": 2.2372005815434477, "recomputed_drop": 2.2372005815434477, "absolute_error": 0.0, "passed": true}
+{"item_id": "2", "mechanism": "alternative", "original_drop": 2.1260821954699622, "recomputed_drop": 2.1260821954699622, "absolute_error": 0.0, "passed": true}

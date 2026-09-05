@@ -1,0 +1,25 @@
+{
+  "projection": "exact frozen candidate coordinate plus uncentered SVD of candidate-orthogonal process changes",
+  "candidate": {
+    "token_id": 75075,
+    "layer": 42,
+    "orientation": -1,
+    "tensor_sha256": "8515912d78e8afe1a932bf06dc43cb41a54e446e91a8abbbe008a28fac54ac84",
+    "file": "/home/higher-order-alleys/assets/psr_quick_big_files/directions/layer42_token75075_8515912d78e8.pt"
+  },
+  "source_run_dir": "/home/higher-order-alleys/assets/psr-mediation-precision-blackwell-v1",
+  "source_files": [
+    "/home/higher-order-alleys/assets/psr-mediation-precision-blackwell-v1/residuals_0_confidence.pt",
+    "/home/higher-order-alleys/assets/psr-mediation-precision-blackwell-v1/residuals_0_correctness.pt",
+    "/home/higher-order-alleys/assets/psr-mediation-precision-blackwell-v1/residuals_2_confidence.pt",
+    "/home/higher-order-alleys/assets/psr-mediation-precision-blackwell-v1/residuals_2_correctness.pt"
+  ],
+  "samples": 8,
+  "item_ids": [
+    "0",
+    "2"
+  ],
+  "orthogonal_pc1_energy_fraction": 0.43426923630289266,
+  "orthogonal_pc2_energy_fraction": 0.20507852971605312,
+  "behavioral_mediation_claim": false
+}

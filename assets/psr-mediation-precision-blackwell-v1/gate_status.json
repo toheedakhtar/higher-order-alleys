@@ -1,0 +1,19 @@
+{
+  "status": "failed_precision",
+  "hashes": {
+    "policy": "433ef64d40018813f87e96f924a7294bc21d8bfac8549f2514fde1456298d0d5",
+    "code": "9f7f1d67af2e3c5508b812c19411c84e314450dc5e3172a7d1d45c4e97f3c0cc",
+    "upstream_code": "e1bc8cb8ec40da7d686c1d31879e61d39c0ad9b0e3267bb7caf84980eee04720",
+    "upstream_identity": "df689bd0aef572ba1c22b814f50df31e04caf74953df0ec48cc0c2f411466486",
+    "packages": "36a2d33789fedffc6ca498c638f82df4c7c5dd6c9d31815a4500d9e7d48366ab",
+    "cuda_memory": "2adb4dba8229a315fe33cca8d5f80c6e83e1aecfa56a30292eab723956b9c450",
+    "artifacts": "8b0f207e628f27414fcafe73ab531775b80e64fdc608a3de92306f5f68e3f4f1"
+  },
+  "proposals": 48,
+  "item_ids": [
+    "0",
+    "2"
+  ],
+  "behavioral_outcomes_used": false,
+  "mediation_execution_authorized": false
+}
