@@ -1,9 +1,14 @@
-# Candidate mediation: BF16 precision qualification
+# Candidate mediation: precision qualification
 
-**Status: precision development only. The eight-item mediation experiment is
-not implemented or authorized by this qualification stage.** The user requires
-review of numerical results from the two predeclared smoke items before an
-eight-item run. This workspace has CPU-only PyTorch; real CUDA smoke is pending.
+**Status: mixed-precision qualification implemented; real CUDA equivalence
+validation and approval pending. The eight-item experiment remains unavailable.**
+The Blackwell BF16-native smoke reproduced support exactly but failed leakage
+with certified infeasibility. That approach is closed under its frozen criteria.
+
+See [the current FP32-tail policy and run command](../../docs/MIXED_PRECISION_MEDIATION_POLICY.md).
+`mixed_smoke` exposes only items 0 and 2 and never computes patched judgments.
+The remaining BF16 sections below are retained as the historical implementation
+record; they do not supersede the mixed-policy qualification requirements.
 
 The intended follow-up uses the same eight exploratory quick-run held-out
 items, not an independent replication set or full-profile confirmation. The

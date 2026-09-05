@@ -4,17 +4,20 @@ Last updated: 2026-09-05
 
 ## Current status
 
-The new package is [`experiments/causal_mediation/`](../experiments/causal_mediation/).
-**Only the BF16 patch-precision qualification stage is implemented.** Its
-synthetic tests and small-model integration tests have passed. The real
-two-item CUDA smoke has not run, and the complete eight-item mediation runner,
-behavioral analysis, and final scientific plots remain unimplemented.
+The package is [`experiments/causal_mediation/`](../experiments/causal_mediation/).
+The BF16-native smoke subsequently ran on Blackwell: support reproduction passed
+exactly, but orthogonal leakage failed with certified infeasibility. That policy
+is closed under its frozen criteria, without a scientific mediation result.
 
-This pause follows an explicit protocol requirement: validate and review the
-patch-precision policy before proceeding to the eight-item experiment. The
-current workspace has `torch=2.13.0+cpu`, no available CUDA device, and cannot
-perform the real smoke. No model precision change or mixed-precision fallback
-has been made.
+The user has now authorized **one mixed-precision qualification policy**. Its
+implementation, validation, proposed equivalence limits and current command are
+documented in [Mixed-precision mediation qualification](MIXED_PRECISION_MEDIATION_POLICY.md).
+The full-model mixed-precision smoke remains pending on CUDA; this workspace has
+CPU-only PyTorch. The eight-item mediation runner, behavioral analysis and final
+scientific plots remain unimplemented and unauthorized at this stage.
+
+The remaining sections preserve the original BF16 implementation handoff. For
+the current precision stage, use the mixed-precision document linked above.
 
 ## Scientific purpose
 

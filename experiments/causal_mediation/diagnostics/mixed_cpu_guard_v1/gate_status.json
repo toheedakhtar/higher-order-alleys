@@ -1,0 +1,6 @@
+{
+  "status": "failed_engineering",
+  "error": "precision smoke requires the original CUDA runtime; CPU diagnostics cannot qualify it",
+  "hashes": {},
+  "mediation_execution_authorized": false
+}
