@@ -51,18 +51,25 @@ from experiments.provenance.protocol import (
 # Hooks
 # ---------------------------------------------------------------------------
 class Operator:
-    """Scales MLP outputs of specifiable layer blocks at chosen positions.
-    Hooks are attached to every layer below the readout; `scope` selects
-    which layers, positions, and strength are active per forward pass."""
+    """Scales magnitudes of specifiable layer blocks at chosen positions.
+    Target: "mlp" scales MLP sublayer outputs; "residual" scales the full
+    decoder-block (residual-stream) output. Measurement note (pre-holdout):
+    on Gemma-2-2b the MLP variants proved numerically inert (~1e-2 residual
+    fraction, support drops <= 3e-3 nats at any grid scale), so v2 targets
+    the residual stream with the same family semantics. Hooks are attached
+    to every layer below the readout; `scope` selects which layers,
+    positions, and strength are active per forward pass."""
 
-    def __init__(self, model, layers):
+    def __init__(self, model, layers, target="mlp"):
         self.scale = None
         self.pos = None
         self.active = None
         self.fired = 0
+        self.target = target
         self._handles = []
         for i in layers:
-            self._handles.append((i, model.model.layers[i].mlp.register_forward_hook(self._make(i))))
+            mod = model.model.layers[i].mlp if target == "mlp" else model.model.layers[i]
+            self._handles.append((i, mod.register_forward_hook(self._make(i))))
 
     def _make(self, idx):
         def hook(module, args, out):
@@ -289,7 +296,7 @@ def run_probe(model, tok, op, readout, cfg, layers, run_dir):
     cont_pos = list(range(len(ids_q), len(ids_q) + len(ans_ids)))
     sup_clean = seq_logprob(model, ids_q, ans_ids)
     tau_drop = min(1.0, 0.35 * abs(sup_clean))
-    probe = dict(question=question, key=key, answer=ans,
+    probe = dict(question=question, key=key, answer=ans, op_target=op.target,
                  len_ids_q=len(ids_q), len_ans_ids=len(ans_ids),
                  cont_pos=[cont_pos[0], cont_pos[-1]],
                  sup_clean=round(sup_clean, 6), tau_drop=round(tau_drop, 6))
@@ -508,7 +515,7 @@ def main() -> int:
     assert model.dtype is torch.float32, f"dtype policy violated: {model.dtype}"
 
     layers = cfg.resolve_layers(model.config.num_hidden_layers)
-    op = Operator(model, list(range(0, layers["readout"])))   # hooks on every layer below readout
+    op = Operator(model, list(range(0, layers["readout"])), cfg.op_target)
     readout = Readout(model, layers["readout"])
     (run_dir / "run_manifest.json").write_text(json.dumps(dict(
         phase=args.phase, model_id=cfg.model_id, device=device, layers=layers,

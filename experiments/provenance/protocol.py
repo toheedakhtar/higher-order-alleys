@@ -139,8 +139,10 @@ class Config:
     op_a_frac: tuple = (0.31, 0.42)      # operator block A: mid-depth
     op_b_frac: tuple = (0.54, 0.65)      # operator block B: higher depth
     readout_frac: float = 0.78           # readout block
-    scale_grid: tuple = (0.9, 0.8, 0.7, 0.6, 0.5, 0.35, 0.2)
+    scale_grid: tuple = (0.9, 0.8, 0.7, 0.6, 0.5, 0.35, 0.2, 0.1, 0.05, 0.0, 1.1, 1.3, 1.6, 2.0)
     readout_keep_prob: float = 0.6       # target: keep 60% of answer-span compute
+    op_target: str = "residual"          # operator family v2: block-output (residual) scaling;
+                                         # "mlp" was probe-verified inert on gemma-2 (pre-holdout amendment)
     match_rel_tol: float = 0.15          # support-drop match tolerance (P1 vs M, P1 vs P2)
     candidate_vocab: int = 4096          # directions = unembedding rows of token ids [0, K)
     match_fraction_min: float = 0.65
