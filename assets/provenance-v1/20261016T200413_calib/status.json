@@ -1,0 +1,21 @@
+{
+  "phase": "calib",
+  "gates": {
+    "dtype_fp32": true,
+    "calib_eligible_min": true,
+    "operator_engagement": true,
+    "sign_consistency_min": true
+  },
+  "summary": {
+    "direction": {
+      "candidate_token": 1734,
+      "calib_mean_p1_minus_m": 0.796141,
+      "calib_sign_consistency": 0.8696,
+      "discovery_rule": "v2-consistency-argmax (amended pre-holdout; loser rule v1 record retained)",
+      "n_calib_items": 23
+    },
+    "frozen_direction_sha": "9b0aa5b8a793e08b662735410df31ca19638e63c8305c142083c47529c843f17"
+  },
+  "complete": true,
+  "complete_ts": "2026-10-16T20:07:40Z"
+}

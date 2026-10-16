@@ -1,0 +1,25 @@
+{
+  "frozen_direction_sha": "9b0aa5b8a793e08b662735410df31ca19638e63c8305c142083c47529c843f17",
+  "config_sha": "3d363cb06fdef024d244c087af7125693b4d3d0d558ce2e7170751bdb8b24fa8",
+  "model_id": "google/gemma-2-2b",
+  "layers": {
+    "op_a": [
+      8,
+      9,
+      10
+    ],
+    "op_b": [
+      14,
+      15,
+      16
+    ],
+    "readout": 20
+  },
+  "direction": {
+    "candidate_token": 1734,
+    "calib_mean_p1_minus_m": 0.796141,
+    "calib_sign_consistency": 0.8696,
+    "discovery_rule": "v2-consistency-argmax (amended pre-holdout; loser rule v1 record retained)",
+    "n_calib_items": 23
+  }
+}
