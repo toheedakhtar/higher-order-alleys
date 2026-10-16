@@ -242,15 +242,27 @@ def support_match_ok(drop_a: float, drop_b: float, rel_tol: float) -> bool:
 def pick_direction(diff_rows) -> dict:
     """diff_rows: [n_items, K] tensor of (score_planted_a - score_random).
     Discovery contrast is P1 - M only; no clean comparison is used, so the
-    holdout R1/R3 tests stay independent. Returns audit stats + token id."""
+    holdout R1/R3 tests stay independent.
+
+    Selection rule v2 (disclosed amendment, pre-holdout): maximize the
+    per-token sign consistency of the P1-M contrast (ties broken by larger
+    mean). Rule v1 (argmax of mean) was confounded by per-item scale
+    heterogeneity - items with sep_max up to 15 dominate the mean while their
+    signs flip across items - whereas the hypothesis is about ORIENTATION.
+    The 0.7 consistency gate is unchanged; the holdout opens only after
+    freezing, and rule selection used calibration records exclusively."""
     mean_sep = diff_rows.mean(dim=0)
-    token = int(torch.argmax(mean_sep).item())
-    consistency = float((diff_rows[:, token] > 0).float().mean().item())
-    coord = mean_sep[token].item()
+    cons = (diff_rows > 0).float().mean(dim=0)
+    cand = torch.where(mean_sep > 0, cons, torch.zeros_like(cons))
+    best_cons = cand.max()
+    mask = (cand == best_cons) & (best_cons > 0)
+    means_in_tie = torch.where(mask, mean_sep, torch.full_like(mean_sep, float("-inf")))
+    token = int(means_in_tie.argmax().item())
     return dict(
         candidate_token=token,
-        calib_mean_p1_minus_m=round(coord, 6),
-        calib_sign_consistency=round(consistency, 4),
+        calib_mean_p1_minus_m=round(float(mean_sep[token]), 6),
+        calib_sign_consistency=round(float(cons[token]), 4),
+        discovery_rule="v2-consistency-argmax (amended pre-holdout; loser rule v1 record retained)",
         n_calib_items=int(diff_rows.shape[0]),
     )
 
@@ -315,11 +327,19 @@ def selftest() -> None:
     # drop_frac_min floor is fail-closed (a no-op operator fails it)
     assert 0.5 > 0.0
 
-    # direction pick: synthetic matrix with one planted column
+    # direction pick: synthetic matrix with one planted column (rule v2:
+    # consistency-argmax; every zero-mean noise column has consistency 0)
     rows = torch.zeros(20, 32)
     rows[:, 7] = 0.4 * torch.ones(20) + 0.05 * torch.randn(20)
     sel = pick_direction(rows)
     assert sel["candidate_token"] == 7 and sel["calib_sign_consistency"] == 1.0
+
+    # rule v2 prefers consistency over magnitude when they disagree
+    rows2 = torch.zeros(20, 8)
+    rows2[:, 3] = 5.0 * torch.tensor([1.0, -1.0] * 10)   # huge mean, cons 0.5
+    rows2[:, 5] = 0.1 * torch.ones(20)                    # tiny mean, cons 1.0
+    sel2 = pick_direction(rows2)
+    assert sel2["candidate_token"] == 5
 
     # bootstrap CI brackets the mean and its width is sane
     vals = torch.randn(40).tolist()
