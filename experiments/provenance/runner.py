@@ -59,6 +59,7 @@ class Operator:
         self.scale = None
         self.pos = None
         self.active = None
+        self.fired = 0
         self._handles = []
         for i in layers:
             self._handles.append((i, model.model.layers[i].mlp.register_forward_hook(self._make(i))))
@@ -70,11 +71,12 @@ class Operator:
             t = out[0] if isinstance(out, tuple) else out
             scaled = t.clone()
             scaled[:, self.pos, :] = scaled[:, self.pos, :] * self.scale
+            self.fired += 1
             return (scaled,) + tuple(out[1:]) if isinstance(out, tuple) else scaled
         return hook
 
     def scope(self, scale, pos, olayers):
-        self.scale, self.pos, self.active = scale, pos, tuple(olayers)
+        self.scale, self.pos, self.active, self.fired = scale, pos, tuple(olayers), 0
         return self
 
     def clear(self):
@@ -138,13 +140,20 @@ def greedy_answer(model, tok, question: str, max_new: int) -> str:
 
 
 def judge_geometry(tok, question: str, answer: str):
+    """Offsets-free geometry: the answer span is located by token-id
+    concatenation, never by tokenizer offset mappings (which are unreliable
+    for some fast tokenizers). Fails closed: the decode-roundtrip check
+    returns ok=False rather than a span that may be silently wrong."""
     prefix = f"Q: {question}\nA: "
-    enc = tok(prefix + f"{answer}\nWas your answer CORRECT or INCORRECT?\nAnswer:",
-              return_offsets_mapping=True)
-    start = len(prefix)
-    ans_pos = [i for i, (a, b) in enumerate(enc.offset_mapping) if b > start and a < start + len(answer)]
-    ids = enc.input_ids
-    return ids, ans_pos, len(ids) - 1
+    ids_prefix = tok(prefix, add_special_tokens=True).input_ids
+    ids_ans = tok(" " + answer, add_special_tokens=False).input_ids
+    suffix = tok(f"\nWas your answer CORRECT or INCORRECT?\nAnswer:",
+                 add_special_tokens=False).input_ids
+    ids = ids_prefix + ids_ans + suffix
+    lo, hi = len(ids_prefix), len(ids_prefix) + len(ids_ans)
+    mid = tok.decode(ids[lo:hi]).strip().lower()
+    ok = answer.strip().lower() in mid
+    return ids, list(range(lo, hi)), len(ids) - 1, ok
 
 
 def margin(model, tok, ids_judge, op=None, scale=None, pos=None, olayers=None) -> float:
@@ -207,8 +216,8 @@ def build_item(model, tok, op, item_idx, cfg, layers):
     ids_q = tok(question_prompt(question)).input_ids
     ans_ids = tok(" " + ans, add_special_tokens=False).input_ids
     sup_clean = seq_logprob(model, ids_q, ans_ids)
-    tau_drop = min(1.0, 0.35 * sup_clean)
-    ids_judge, ans_pos, readout_pos = judge_geometry(tok, question, ans)
+    tau_drop = min(1.0, 0.35 * abs(sup_clean))
+    ids_judge, ans_pos, readout_pos, geom_ok = judge_geometry(tok, question, ans)
 
     rng = item_rng(item_idx, cfg.seed)
     m_layers = rng.sample([i for i in range(layers["readout"])
@@ -222,6 +231,16 @@ def build_item(model, tok, op, item_idx, cfg, layers):
         op_m=scan_operator(model, ids_q, ans_ids, op, m_layers, sup_clean, tau_drop, cfg),
         readout_layer=layers["readout"], readout_pos=readout_pos,
     ))
+    if not geom_ok:
+        rec["eligible"] = False
+        rec["excluded_reason"] = "geometry_roundtrip"
+        return rec, None
+    hit = max(rec["op_a"]["drop"], rec["op_b"]["drop"])
+    rec["drop_frac"] = round(hit / max(tau_drop, 1e-9), 6)
+    if hit < cfg.drop_frac_min * max(tau_drop, 1e-9):
+        rec["eligible"] = False
+        rec["excluded_reason"] = "no_scale_hit"
+        return rec, None
     ctx = dict(ids_judge=ids_judge, ans_pos=ans_pos, readout_pos=readout_pos)
     return rec, ctx
 
@@ -256,6 +275,93 @@ def condition_scores(model, op, readout, rec, ctx, layers, U=None, v=None):
 # ---------------------------------------------------------------------------
 # Phases
 # ---------------------------------------------------------------------------
+def run_probe(model, tok, op, readout, cfg, layers, run_dir):
+    """Diagnostic phase (no gates, no direction): item 0 only. Measures
+    (1) full support grids for op_a/op_b/op_m printed per scale, (2) whether
+    the scoped hook actually fires on this architecture's MLP path and the
+    MLP-output vs residual-stream norms at a mid answer position, and
+    (3) old offset-mapping vs new token-id geometry. Writes probe.json."""
+    idx = 0
+    question, key = DATASET[idx][1], DATASET[idx][2]
+    ans = greedy_answer(model, tok, question, cfg.gen_max_new)
+    ids_q = tok(question_prompt(question)).input_ids
+    ans_ids = tok(" " + ans, add_special_tokens=False).input_ids
+    cont_pos = list(range(len(ids_q), len(ids_q) + len(ans_ids)))
+    sup_clean = seq_logprob(model, ids_q, ans_ids)
+    tau_drop = min(1.0, 0.35 * abs(sup_clean))
+    probe = dict(question=question, key=key, answer=ans,
+                 len_ids_q=len(ids_q), len_ans_ids=len(ans_ids),
+                 cont_pos=[cont_pos[0], cont_pos[-1]],
+                 sup_clean=round(sup_clean, 6), tau_drop=round(tau_drop, 6))
+
+    rng = item_rng(idx, cfg.seed)
+    m_layers = tuple(rng.sample([i for i in range(layers["readout"])
+                                 if i not in layers["op_a"] and i not in layers["op_b"]],
+                                len(layers["op_a"])))
+    for name, blk in (("op_a", layers["op_a"]), ("op_b", layers["op_b"]), ("op_m", m_layers)):
+        grid = {str(s): round(seq_logprob(model, ids_q, ans_ids, op, s, cont_pos, blk), 6)
+                for s in cfg.scale_grid}
+        probe[f"grid_{name}"] = dict(layers=list(blk), scales=list(cfg.scale_grid),
+                                     support=grid,
+                                     drop={s: round(sup_clean - g, 6) for s, g in grid.items()})
+
+    pos_p = cont_pos[max(0, len(cont_pos) // 2)]
+    infos = {i: dict(mlp=None, resid=None) for i in range(layers["readout"])}
+    handles = []
+    for i in range(layers["readout"]):
+        def m_hook(ii):
+            def h(m, a, o):
+                t = o[0] if isinstance(o, tuple) else o
+                infos[ii]["mlp"] = float(t[0, pos_p].norm())
+            return h
+        def r_hook(ii):
+            def h(m, a, o):
+                t = o[0] if isinstance(o, tuple) else o
+                infos[ii]["resid"] = float(t[0, pos_p].norm())
+            return h
+        handles.append(model.model.layers[i].mlp.register_forward_hook(m_hook(i)))
+        handles.append(model.model.layers[i].register_forward_hook(r_hook(i)))
+    fired_counts = {}
+    try:
+        op.clear()
+        _ = model(torch.tensor([ids_q + ans_ids], device=model.device))
+        op.clear()
+        op.scope(0.5, cont_pos, layers["op_a"])
+        try:
+            _ = model(torch.tensor([ids_q + ans_ids], device=model.device))
+            fired_counts = dict(scoped_fired=op.fired,
+                                expected_per_forward=len(layers["op_a"]))
+        finally:
+            op.clear()
+    finally:
+        op.clear()
+        for h in handles:
+            h.remove()
+    probe["profile_pos"] = pos_p
+    probe["norm_relu"] = {str(i): dict(
+        mlp=(round(infos[i]["mlp"], 4) if infos[i]["mlp"] is not None else None),
+        resid=(round(infos[i]["resid"], 4) if infos[i]["resid"] is not None else None),
+        ratio=(round(infos[i]["mlp"] / max(infos[i]["resid"], 1e-9), 6)
+               if infos[i]["mlp"] is not None and infos[i]["resid"] else None))
+        for i in range(layers["readout"])}
+    probe["hook_fire"] = fired_counts
+
+    prefix = f"Q: {question}\nA: "
+    try:
+        ofm = tok(prefix + f"{ans}\nWas your answer CORRECT or INCORRECT?\nAnswer:",
+                  return_offsets_mapping=True).offset_mapping
+        offsets = ofm[:12]
+    except Exception as e:  # noqa: BLE001
+        offsets = f"offset_mapping failed: {e!r}"
+    n_ids, n_pos, n_rp, n_ok = judge_geometry(tok, question, ans)
+    probe["geometry"] = dict(offset_mapping_sample=offsets,
+                             new=dict(n_ids=len(n_ids), ans_span=[n_pos[0], n_pos[-1]],
+                                      readout_pos=n_rp, roundtrip_ok=n_ok))
+    (run_dir / "probe.json").write_text(json.dumps(probe, indent=2, default=str))
+    print(json.dumps(probe, indent=2, default=str))
+    return probe
+
+
 def run_calib(model, tok, op, readout, cfg, layers, run_dir, limit):
     U = model.lm_head.weight.detach()[: cfg.candidate_vocab].float()
     U = U / U.norm(dim=1, keepdim=True)
@@ -380,7 +486,7 @@ def source_hashes() -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--phase", choices=["calib", "holdout"], required=True)
+    ap.add_argument("--phase", choices=["calib", "holdout", "probe"], required=True)
     ap.add_argument("--model", default="google/gemma-2-2b")
     ap.add_argument("--device", default="auto")
     ap.add_argument("--out", default=None)
@@ -397,7 +503,7 @@ def main() -> int:
     device = ("cuda" if torch.cuda.is_available() else "cpu") if args.device == "auto" else args.device
 
     tok = AutoTokenizer.from_pretrained(cfg.model_id)
-    model = AutoModelForCausalLM.from_pretrained(cfg.model_id, torch_dtype=torch.float32).to(device)
+    model = AutoModelForCausalLM.from_pretrained(cfg.model_id, dtype=torch.float32).to(device)
     model.eval()
     assert model.dtype is torch.float32, f"dtype policy violated: {model.dtype}"
 
@@ -411,7 +517,10 @@ def main() -> int:
         source_hashes=source_hashes()), indent=2, default=str))
     try:
         with torch.inference_mode():
-            if args.phase == "calib":
+            if args.phase == "probe":
+                run_probe(model, tok, op, readout, cfg, layers, run_dir)
+                status = dict(phase="probe", gates={}, complete=True)
+            elif args.phase == "calib":
                 gates, summary = run_calib(model, tok, op, readout, cfg, layers, run_dir, args.limit)
                 status = dict(phase="calib", gates=gates, summary=summary, complete=bool(summary))
             else:

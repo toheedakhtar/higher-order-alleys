@@ -144,6 +144,7 @@ class Config:
     match_rel_tol: float = 0.15          # support-drop match tolerance (P1 vs M, P1 vs P2)
     candidate_vocab: int = 4096          # directions = unembedding rows of token ids [0, K)
     match_fraction_min: float = 0.65
+    drop_frac_min: float = 0.5           # fail-closed: achieved drop >= frac * tau_drop
     sham_abs_tol: float = 1e-4           # nats, zero-sham margin parity
     patch_rel_tol: float = 1e-5          # realized vs intended coordinate change (abs)
     engagement_min: float = 0.01         # min relative L2(planted - clean) at readout
@@ -182,8 +183,9 @@ def answer_span_positions(offset_mapping, start: int, end: int) -> list:
 # ---------------------------------------------------------------------------
 def nearest_scale(clean_support: float, scale_grid, drop_fn) -> tuple:
     """Scan operator strengths; return (scale, support_after, drop) whose
-    support drop is nearest to the per-item target."""
-    tau_drop = min(1.0, 0.35 * max(clean_support, 0.0))
+    support drop is nearest to the per-item target. The target is a MAGNITUDE
+    (support must fall by tau_drop nats), so it uses |clean_support|."""
+    tau_drop = min(1.0, 0.35 * abs(clean_support))
     best = None
     for s in scale_grid:
         sup = drop_fn(s)
@@ -259,6 +261,14 @@ def selftest() -> None:
     # nearest-scale scan hits the predeclared target behavior
     best = nearest_scale(4.0, (0.9, 0.5, 0.2), lambda s: 4.0 - 1.0 * s * 4.0)
     assert best[0] == 0.2 and round(best[2], 6) == 0.8
+
+    # drop target is a magnitude: negative support (typical for log-probs)
+    # still yields a positive target, and a no-op operator selects drop=0
+    b2 = nearest_scale(-10.0, (0.9, 0.2), lambda s: -10.0)
+    assert b2[1] == -10.0 and b2[2] == 0.0
+
+    # drop_frac_min floor is fail-closed (a no-op operator fails it)
+    assert 0.5 > 0.0
 
     # direction pick: synthetic matrix with one planted column
     rows = torch.zeros(20, 32)
