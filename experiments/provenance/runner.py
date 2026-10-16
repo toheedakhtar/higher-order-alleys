@@ -310,7 +310,10 @@ def run_probe(model, tok, op, readout, cfg, layers, run_dir):
                 for s in cfg.scale_grid}
         probe[f"grid_{name}"] = dict(layers=list(blk), scales=list(cfg.scale_grid),
                                      support=grid,
-                                     drop={s: round(sup_clean - g, 6) for s, g in grid.items()})
+                                     drop={s: round(sup_clean - g, 6) for s, g in grid.items()},
+                                     nearest=dict(zip(("scale", "support", "drop"),
+                                                      nearest_scale(sup_clean, cfg.scale_grid,
+                                                                    lambda s: grid[str(s)]))))
 
     pos_p = cont_pos[max(0, len(cont_pos) // 2)]
     infos = {i: dict(mlp=None, resid=None) for i in range(layers["readout"])}
@@ -329,9 +332,11 @@ def run_probe(model, tok, op, readout, cfg, layers, run_dir):
         handles.append(model.model.layers[i].mlp.register_forward_hook(m_hook(i)))
         handles.append(model.model.layers[i].register_forward_hook(r_hook(i)))
     fired_counts = {}
+    clean_snapshot = None
     try:
         op.clear()
         _ = model(torch.tensor([ids_q + ans_ids], device=model.device))
+        clean_snapshot = {i: dict(infos[i]) for i in infos}   # freeze clean norms
         op.clear()
         op.scope(0.5, cont_pos, layers["op_a"])
         try:
@@ -346,10 +351,10 @@ def run_probe(model, tok, op, readout, cfg, layers, run_dir):
             h.remove()
     probe["profile_pos"] = pos_p
     probe["norm_relu"] = {str(i): dict(
-        mlp=(round(infos[i]["mlp"], 4) if infos[i]["mlp"] is not None else None),
-        resid=(round(infos[i]["resid"], 4) if infos[i]["resid"] is not None else None),
-        ratio=(round(infos[i]["mlp"] / max(infos[i]["resid"], 1e-9), 6)
-               if infos[i]["mlp"] is not None and infos[i]["resid"] else None))
+        mlp=(round(clean_snapshot[i]["mlp"], 4) if clean_snapshot[i]["mlp"] is not None else None),
+        resid=(round(clean_snapshot[i]["resid"], 4) if clean_snapshot[i]["resid"] is not None else None),
+        ratio=(round(clean_snapshot[i]["mlp"] / max(clean_snapshot[i]["resid"], 1e-9), 6)
+               if clean_snapshot[i]["mlp"] is not None and clean_snapshot[i]["resid"] else None))
         for i in range(layers["readout"])}
     probe["hook_fire"] = fired_counts
 
