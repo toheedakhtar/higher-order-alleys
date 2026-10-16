@@ -42,12 +42,10 @@ from experiments.provenance.protocol import (
     pick_direction,
     question_prompt,
     random_unit_direction,
+    scan_tau,
     sha256_json,
     support_match_ok,
-)
-
-
-# ---------------------------------------------------------------------------
+)# ---------------------------------------------------------------------------
 # Hooks
 # ---------------------------------------------------------------------------
 class Operator:
@@ -205,9 +203,10 @@ def item_rng(item_idx, seed) -> random.Random:
 # ---------------------------------------------------------------------------
 def scan_operator(model, ids_q, ans_ids, op, block_layers, sup_clean, tau_drop, cfg):
     cont_pos = list(range(len(ids_q), len(ids_q) + len(ans_ids)))
-    grid = {s: seq_logprob(model, ids_q, ans_ids, op, s, cont_pos, block_layers) for s in cfg.scale_grid}
-    scale, support, drop = nearest_scale(sup_clean, cfg.scale_grid, grid.get)
-    return dict(layers=list(block_layers), scale=scale,
+    scale, support, drop = scan_tau(
+        sup_clean, cfg.scale_grid,
+        lambda s: seq_logprob(model, ids_q, ans_ids, op, s, cont_pos, block_layers))
+    return dict(layers=list(block_layers), scale=round(scale, 6),
                 support=round(support, 6), drop=round(drop, 6))
 
 
@@ -312,8 +311,8 @@ def run_probe(model, tok, op, readout, cfg, layers, run_dir):
                                      support=grid,
                                      drop={s: round(sup_clean - g, 6) for s, g in grid.items()},
                                      nearest=dict(zip(("scale", "support", "drop"),
-                                                      nearest_scale(sup_clean, cfg.scale_grid,
-                                                                    lambda s: grid[str(s)]))))
+                                                      scan_tau(sup_clean, cfg.scale_grid,
+                                                               lambda s: grid[str(s)]))))
 
     pos_p = cont_pos[max(0, len(cont_pos) // 2)]
     infos = {i: dict(mlp=None, resid=None) for i in range(layers["readout"])}
@@ -383,6 +382,13 @@ def run_calib(model, tok, op, readout, cfg, layers, run_dir, limit):
         if ctx is None:
             records.append(rec)
             continue
+        dmg = (support_match_ok(rec["op_a"]["drop"], rec["op_b"]["drop"], cfg.match_rel_tol)
+               and support_match_ok(rec["op_a"]["drop"], rec["op_m"]["drop"], cfg.match_rel_tol))
+        if not dmg:
+            rec["eligible"] = False
+            rec["excluded_reason"] = "support_mismatch_calib"
+            records.append(rec)
+            continue
         sc, hh = condition_scores(model, op, readout, rec, ctx, layers, U=U)
         diff = torch.tensor(sc["planted_a"]) - torch.tensor(sc["random"])
         rows.append(diff)
@@ -400,7 +406,10 @@ def run_calib(model, tok, op, readout, cfg, layers, run_dir, limit):
         records.append(rec)
         print(f"calib {idx}: eligible, sep_mean={float(diff.mean()):.4f} "
               f"sep_max={float(diff.abs().max()):.4f} engage={rec['diag']['l2_planted_clean_rel']:.4f} "
-              f"ansspan={rec['diag']['l2_ansspan_rel']:.4f}")
+              f"ansspan={rec['diag']['l2_ansspan_rel']:.4f} "
+              f"sA={rec['op_a']['scale']:.3f} dA={rec['op_a']['drop']:.3f} "
+              f"sB={rec['op_b']['scale']:.3f} dB={rec['op_b']['drop']:.3f} "
+              f"sM={rec['op_m']['scale']:.3f} dM={rec['op_m']['drop']:.3f}")
 
     eligible = [r for r in records if r.get("eligible")]
     gates = dict(dtype_fp32=model.dtype is torch.float32,

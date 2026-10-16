@@ -55,7 +55,6 @@ import random
 from dataclasses import dataclass
 
 import torch
-
 DTYPE_POLICY = "float32"
 JUDGE_LABELS = (" CORRECT", " INCORRECT")
 
@@ -198,6 +197,43 @@ def nearest_scale(clean_support: float, scale_grid, drop_fn) -> tuple:
     return best[1], best[2], best[3]
 
 
+def scan_tau(clean_support: float, scale_grid, drop_fn, iters: int = 12) -> tuple:
+    """Coarse grid + bisection: return (scale, support_after, drop) whose
+    support drop is closest to the magnitude target
+    tau_drop = min(1.0, 0.35*|clean_support|). When two adjacent grid scales
+    bracket the target, bisection refines between them so all operator
+    placements can be damage-matched per item (calibration amendment v2.1,
+    pre-holdout). Falls back to the nearest grid scale if no bracket exists."""
+    tau_drop = min(1.0, 0.35 * abs(clean_support))
+    pts = sorted((s, drop_fn(s)) for s in scale_grid)   # by scale ascending
+    best = None
+    for i in range(len(pts) - 1):
+        (s_a, sup_a), (s_b, sup_b) = pts[i], pts[i + 1]
+        d_a = clean_support - sup_a
+        d_b = clean_support - sup_b
+        if (d_a - tau_drop) * (d_b - tau_drop) > 0:
+            continue
+        for _ in range(iters):
+            mid = 0.5 * (s_a + s_b)
+            d_m = clean_support - drop_fn(mid)
+            if (d_m - tau_drop) * (d_a - tau_drop) > 0:
+                s_a, d_a = mid, d_m
+            else:
+                s_b, d_b = mid, d_m
+        s_r = 0.5 * (s_a + s_b)
+        sup_r = drop_fn(s_r)
+        d_r = clean_support - sup_r
+        if best is None or abs(d_r - tau_drop) < best[0]:
+            best = (abs(d_r - tau_drop), s_r, sup_r, d_r)
+    # fallback: nearest grid point if nothing bracketed
+    if best is None:
+        for s, sup in pts:
+            d = clean_support - sup
+            if best is None or abs(d - tau_drop) < abs(best[3] - tau_drop):
+                best = (abs(d - tau_drop), s, sup, d)
+    return best[1], best[2], best[3]
+
+
 def support_match_ok(drop_a: float, drop_b: float, rel_tol: float) -> bool:
     scale = max(drop_a, drop_b, 1e-6)
     return abs(drop_a - drop_b) / scale <= rel_tol
@@ -268,6 +304,13 @@ def selftest() -> None:
     # still yields a positive target, and a no-op operator selects drop=0
     b2 = nearest_scale(-10.0, (0.9, 0.2), lambda s: -10.0)
     assert b2[1] == -10.0 and b2[2] == 0.0
+
+    # scan_tau: bracket + bisection hits the magnitude target precisely
+    b3 = scan_tau(-10.0, (0.7, 0.9, 0.99), lambda s: -10.0 - 20.0 * (1.0 - s))
+    assert abs(b3[0] - 0.95) < 0.01 and abs(b3[2] - 1.0) < 0.05, b3
+    # no bracket -> nearest grid point fallback
+    b4 = scan_tau(-10.0, (0.9, 0.2), lambda s: -10.0)
+    assert b4[1] == -10.0 and b4[2] == 0.0
 
     # drop_frac_min floor is fail-closed (a no-op operator fails it)
     assert 0.5 > 0.0
