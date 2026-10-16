@@ -550,7 +550,7 @@ def main() -> int:
                     meta_path = dpath.with_name("frozen_direction.json")
                     meta = json.loads(meta_path.read_text()) if meta_path.exists() else {}
                     sha_ok = dpath.exists() and hashlib.sha256(dpath.read_bytes()).hexdigest() == meta.get("frozen_direction_sha")
-                    layers_ok = meta.get("layers") == layers
+                    layers_ok = meta.get("layers") == json.loads(json.dumps(layers))
                     if not (sha_ok and layers_ok):
                         status = dict(phase="holdout", gates={"frozen_direction_verified": sha_ok,
                                                               "resolved_layers_match": layers_ok},
