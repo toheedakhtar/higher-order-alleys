@@ -145,7 +145,8 @@ class Config:
     candidate_vocab: int = 4096          # directions = unembedding rows of token ids [0, K)
     match_fraction_min: float = 0.65
     sham_abs_tol: float = 1e-4           # nats, zero-sham margin parity
-    patch_rel_tol: float = 1e-5          # realized vs intended coordinate change
+    patch_rel_tol: float = 1e-5          # realized vs intended coordinate change (abs)
+    engagement_min: float = 0.01         # min relative L2(planted - clean) at readout
     n_calib: int = N_CALIB
     bootstrap: int = 999
 

@@ -61,10 +61,17 @@ def pass_or_fail(ci, need_lo_above_zero=True):
 def analyze(run_dir: Path) -> dict:
     status = json.loads((run_dir / "status.json").read_text())
     docs = [json.loads(l) for l in (run_dir / "records.jsonl").read_text().splitlines() if l.strip()]
-    if run_dir.name.endswith("calib") or all("score_planted_a" not in d for d in docs):
+    if status.get("phase") != "holdout":
         el = [d for d in docs if d.get("eligible")]
         return dict(kind="calib_summary", n_eligible=len(el))
     matched = [d for d in docs if d.get("support_match_ok") and "score_planted_a" in d]
+    if not matched:
+        summary = dict(run_dir=str(run_dir), run_gates_ok=bool(status.get("complete")),
+                       n_matched=0, earned_claim="fail-closed: no support-matched holdout items; rungs not evaluated",
+                       rungs={})
+        (run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
+        (run_dir / "report.md").write_text(render_report(summary))
+        return summary
     cfg = json.loads((run_dir / "run_manifest.json").read_text())["config"]
 
     r1 = bootstrap_ci_mean([d["score_planted_a"] - d["score_clean"] for d in matched], cfg["bootstrap"], cfg["seed"])
@@ -130,8 +137,8 @@ def render_report(s: dict) -> str:
     for name, v in s["rungs"].items():
         cis = [f"`{k}={json.dumps(c)}`" for k, c in v.items() if isinstance(c, dict) and "lo" in c]
         lines += [f"- **{name}**: {'PASS' if v['passed'] else 'FAIL'}; " + "; ".join(cis)]
-    c = s["convergence_diagnostic_p1_vs_p2"]
-    lines += ["", f"Convergence diagnostic (P1 vs P2, non-blocking): {c['interpretation']}; `ci={json.dumps(c['ci'])}`"]
+    c = s.get("convergence_diagnostic_p1_vs_p2", dict(ci={}, interpretation="not applicable"))
+    lines += ["", f"Convergence diagnostic (P1 vs P2, non-blocking): {c.get('interpretation')}; `ci={json.dumps(c.get('ci', {}))}`"]
     lines += ["",
               "## Claim",
               "",

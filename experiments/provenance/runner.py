@@ -51,30 +51,37 @@ from experiments.provenance.protocol import (
 # Hooks
 # ---------------------------------------------------------------------------
 class Operator:
-    """Scales MLP outputs of a layer block at a fixed set of positions."""
+    """Scales MLP outputs of specifiable layer blocks at chosen positions.
+    Hooks are attached to every layer below the readout; `scope` selects
+    which layers, positions, and strength are active per forward pass."""
 
     def __init__(self, model, layers):
         self.scale = None
         self.pos = None
-        self._handles = [model.model.layers[i].mlp.register_forward_hook(self._hook) for i in layers]
+        self.active = None
+        self._handles = []
+        for i in layers:
+            self._handles.append((i, model.model.layers[i].mlp.register_forward_hook(self._make(i))))
 
-    def _hook(self, module, args, out):
-        if self.scale is None or self.pos is None:
-            return out
-        t = out[0] if isinstance(out, tuple) else out
-        scaled = t.clone()
-        scaled[:, self.pos, :] = scaled[:, self.pos, :] * self.scale
-        return (scaled,) + tuple(out[1:]) if isinstance(out, tuple) else scaled
+    def _make(self, idx):
+        def hook(module, args, out):
+            if self.scale is None or self.pos is None or self.active is None or idx not in self.active:
+                return out
+            t = out[0] if isinstance(out, tuple) else out
+            scaled = t.clone()
+            scaled[:, self.pos, :] = scaled[:, self.pos, :] * self.scale
+            return (scaled,) + tuple(out[1:]) if isinstance(out, tuple) else scaled
+        return hook
 
-    def scope(self, scale, pos):
-        self.scale, self.pos = scale, pos
+    def scope(self, scale, pos, olayers):
+        self.scale, self.pos, self.active = scale, pos, tuple(olayers)
         return self
 
     def clear(self):
-        self.scale, self.pos = None, None
+        self.scale, self.pos, self.active = None, None, None
 
     def remove(self):
-        for h in self._handles:
+        for _, h in self._handles:
             h.remove()
 
 
@@ -108,11 +115,11 @@ class Readout:
 # ---------------------------------------------------------------------------
 # Forward utilities (batch 1, inference mode)
 # ---------------------------------------------------------------------------
-def seq_logprob(model, ids_prompt, ids_cont, op=None, scale=None, pos=None) -> float:
+def seq_logprob(model, ids_prompt, ids_cont, op=None, scale=None, pos=None, olayers=None) -> float:
     total = ids_prompt + ids_cont
     ids = torch.tensor([total], device=model.device)
     if scale is not None and pos is not None and op is not None:
-        op.scope(scale, pos)
+        op.scope(scale, pos, olayers or ())
     try:
         logits = model(ids).logits
     finally:
@@ -140,32 +147,32 @@ def judge_geometry(tok, question: str, answer: str):
     return ids, ans_pos, len(ids) - 1
 
 
-def margin(model, tok, ids_judge, op=None, scale=None, pos=None) -> float:
+def margin(model, tok, ids_judge, op=None, scale=None, pos=None, olayers=None) -> float:
     vals = []
     for lab in JUDGE_LABELS:
         vals.append(seq_logprob(model, ids_judge, tok(lab, add_special_tokens=False).input_ids,
-                                op, scale, pos))
+                                op, scale, pos, olayers))
     return vals[0] - vals[1]
 
 
-def margin_patched(model, tok, ids_judge, readout, delta, pos, op=None, osc=None, opos=None) -> float:
+def margin_patched(model, tok, ids_judge, readout, delta, pos, op=None, osc=None, opos=None, olayers=None) -> float:
     vals = []
     for lab in JUDGE_LABELS:
         cont = tok(lab, add_special_tokens=False).input_ids
         readout.patch, readout.pos = delta, pos
         try:
-            vals.append(seq_logprob(model, ids_judge, cont, op, osc, opos))
+            vals.append(seq_logprob(model, ids_judge, cont, op, osc, opos, olayers))
         finally:
             readout.clear()
     return vals[0] - vals[1]
 
 
-def probe_scoped(model, ids_judge, readout, op, scale, pos):
+def probe_scoped(model, ids_judge, readout, op, scale, pos, olayers=None):
     """One judgment forward; returns the readout-layer residual at the final
     judgment-prompt token (which is the last token before the label)."""
     ids = torch.tensor([ids_judge], device=model.device)
     if scale is not None and pos is not None:
-        op.scope(scale, pos)
+        op.scope(scale, pos, olayers or ())
     try:
         _ = model(ids)
     finally:
@@ -182,7 +189,7 @@ def item_rng(item_idx, seed) -> random.Random:
 # ---------------------------------------------------------------------------
 def scan_operator(model, ids_q, ans_ids, op, block_layers, sup_clean, tau_drop, cfg):
     cont_pos = list(range(len(ids_q), len(ids_q) + len(ans_ids)))
-    grid = {s: seq_logprob(model, ids_q, ans_ids, op, s, cont_pos) for s in cfg.scale_grid}
+    grid = {s: seq_logprob(model, ids_q, ans_ids, op, s, cont_pos, block_layers) for s in cfg.scale_grid}
     scale, support, drop = nearest_scale(sup_clean, cfg.scale_grid, grid.get)
     return dict(layers=list(block_layers), scale=scale,
                 support=round(support, 6), drop=round(drop, 6))
@@ -220,20 +227,24 @@ def build_item(model, tok, op, item_idx, cfg, layers):
 
 
 def condition_scores(model, op, readout, rec, ctx, layers, U=None, v=None):
+    """Returns (scores, hstore): scores are lists (calib) or floats (holdout);
+    hstore is {name: raw readout residual} when U is provided (calib)."""
     ids_judge, ans_pos = ctx["ids_judge"], ctx["ans_pos"]
-    out = {}
+    out, hstore = {}, {}
     for name, blk, scl in (
         ("clean", None, None),
         ("planted_a", layers["op_a"], rec["op_a"]["scale"]),
         ("planted_b", layers["op_b"], rec["op_b"]["scale"]),
         ("random", tuple(rec["op_m"]["layers"]), rec["op_m"]["scale"]),
     ):
-        h = probe_scoped(model, ids_judge, readout, op, scl, ans_pos if blk is not None else None)
-        if v is not None:
-            out[name] = float(torch.dot(v.to(h.dtype).to(h.device), h))
-        else:
+        h = probe_scoped(model, ids_judge, readout, op, scl, ans_pos if blk is not None else None,
+                         blk if blk is not None else None)
+        if U is not None:
+            hstore[name] = h.detach().clone()
             out[name] = [round(x, 5) for x in (h @ U.T).tolist()]
-    return out
+        else:
+            out[name] = float(torch.dot(v.to(h.dtype).to(h.device), h))
+    return out, hstore
 
 
 # ---------------------------------------------------------------------------
@@ -242,24 +253,32 @@ def condition_scores(model, op, readout, rec, ctx, layers, U=None, v=None):
 def run_calib(model, tok, op, readout, cfg, layers, run_dir, limit):
     U = model.lm_head.weight.detach()[: cfg.candidate_vocab].float()
     U = U / U.norm(dim=1, keepdim=True)
-    rows, records = [], []
+    rows, records, engagement = [], [], []
     for idx in range(min(limit or cfg.n_calib, cfg.n_calib)):
         rec, ctx = build_item(model, tok, op, idx, cfg, layers)
         if ctx is None:
             records.append(rec)
             continue
-        sc = condition_scores(model, op, readout, rec, ctx, layers, U=U)
+        sc, hh = condition_scores(model, op, readout, rec, ctx, layers, U=U)
         diff = torch.tensor(sc["planted_a"]) - torch.tensor(sc["random"])
         rows.append(diff)
         rec["scores_planted_minus_random"] = diff.tolist()
+        rec["diag"] = dict(
+            h_clean_norm=round(float(hh["clean"].norm()), 6),
+            l2_planted_clean_rel=round(float((hh["planted_a"] - hh["clean"]).norm() / max(hh["clean"].norm(), 1e-9)), 6),
+            l2_planted_random_rel=round(float((hh["planted_a"] - hh["random"]).norm() / max(hh["random"].norm(), 1e-9)), 6),
+        )
+        engagement.append(rec["diag"]["l2_planted_clean_rel"])
         records.append(rec)
-        print(f"calib {idx}: eligible, sep_mean={float(diff.mean()):.4f}")
+        print(f"calib {idx}: eligible, sep_mean={float(diff.mean()):.4f} "
+              f"sep_max={float(diff.abs().max()):.4f} engage={rec['diag']['l2_planted_clean_rel']:.4f}")
 
     eligible = [r for r in records if r.get("eligible")]
     gates = dict(dtype_fp32=model.dtype is torch.float32,
-                 calib_eligible_min=len(eligible) >= 16)
+                 calib_eligible_min=len(eligible) >= 16,
+                 operator_engagement=(min(engagement, default=0.0) >= cfg.engagement_min))
     summary = None
-    if gates["calib_eligible_min"]:
+    if gates["calib_eligible_min"] and gates["operator_engagement"]:
         sel = pick_direction(torch.stack(rows))
         gates["sign_consistency_min"] = sel["calib_sign_consistency"] >= 0.7
         if gates["sign_consistency_min"]:
@@ -287,25 +306,25 @@ def run_holdout(model, tok, op, readout, cfg, layers, run_dir, limit, v):
             records.append(rec)
             continue
         n_elig += 1
-        sc = condition_scores(model, op, readout, rec, ctx, layers, v=v)
+        sc, _hh = condition_scores(model, op, readout, rec, ctx, layers, v=v)
         rec["support_match_ok"] = (support_match_ok(rec["op_a"]["drop"], rec["op_m"]["drop"], cfg.match_rel_tol)
                                    and support_match_ok(rec["op_a"]["drop"], rec["op_b"]["drop"], cfg.match_rel_tol))
         if rec["support_match_ok"]:
             ids_judge = ctx["ids_judge"]
-            osc, opos = rec["op_a"]["scale"], ctx["ans_pos"]
+            osc, opos, olayers = rec["op_a"]["scale"], ctx["ans_pos"], layers["op_a"]
             delta = sc["clean"] - sc["planted_a"]
-            m_p = margin(model, tok, ids_judge, op, osc, opos)
+            m_p = margin(model, tok, ids_judge, op, osc, opos, olayers)
             vec = v.to(model.device) * delta
-            m_rest = margin_patched(model, tok, ids_judge, readout, vec, ctx["readout_pos"], op, osc, opos)
+            m_rest = margin_patched(model, tok, ids_judge, readout, vec, ctx["readout_pos"], op, osc, opos, olayers)
             realized = float(torch.dot(v.to(model.device), readout.h[0, ctx["readout_pos"]]))
             rel = abs(realized - (sc["planted_a"] + delta)) / max(abs(delta), 1e-9)
             rel_errs.append((abs(realized - (sc["planted_a"] + delta)), rel))
             m_sham = margin_patched(model, tok, ids_judge, readout,
-                                    torch.zeros_like(vec), ctx["readout_pos"], op, osc, opos)
+                                    torch.zeros_like(vec), ctx["readout_pos"], op, osc, opos, olayers)
             shams.append(abs(m_sham - m_p))
             rvec = random_unit_direction(v.numel(), item_rng(idx, cfg.seed + 1), model.device)
             m_rand = margin_patched(model, tok, ids_judge, readout,
-                                    rvec * abs(delta), ctx["readout_pos"], op, osc, opos)
+                                    rvec * abs(delta), ctx["readout_pos"], op, osc, opos, olayers)
             rec.update(dict(score_clean=sc["clean"], score_planted_a=sc["planted_a"],
                             score_planted_b=sc["planted_b"], score_random=sc["random"],
                             delta=round(delta, 6),
@@ -372,7 +391,7 @@ def main() -> int:
     assert model.dtype is torch.float32, f"dtype policy violated: {model.dtype}"
 
     layers = cfg.resolve_layers(model.config.num_hidden_layers)
-    op = Operator(model, sorted(set(layers["op_a"]) | set(layers["op_b"])))
+    op = Operator(model, list(range(0, layers["readout"])))   # hooks on every layer below readout
     readout = Readout(model, layers["readout"])
     (run_dir / "run_manifest.json").write_text(json.dumps(dict(
         phase=args.phase, model_id=cfg.model_id, device=device, layers=layers,
