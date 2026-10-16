@@ -1,0 +1,12 @@
+{
+  "phase": "calib",
+  "gates": {
+    "dtype_fp32": true,
+    "calib_eligible_min": true,
+    "operator_engagement": true,
+    "sign_consistency_min": false
+  },
+  "summary": null,
+  "complete": false,
+  "complete_ts": "2026-10-16T19:57:50Z"
+}

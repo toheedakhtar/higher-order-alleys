@@ -1,0 +1,10 @@
+{
+  "phase": "holdout",
+  "gates": {
+    "frozen_direction_verified": true,
+    "resolved_layers_match": false
+  },
+  "complete": false,
+  "error": "missing/unverified frozen direction or layer mismatch - run calib first",
+  "complete_ts": "2026-10-16T20:13:48Z"
+}
