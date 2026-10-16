@@ -1,0 +1,17 @@
+{
+  "phase": "holdout",
+  "gates": {
+    "dtype_fp32": true,
+    "frozen_direction_verified": true,
+    "matched_holdout_min": true,
+    "support_match_fraction": true,
+    "sham_parity": true,
+    "patch_geometry": true
+  },
+  "summary": {
+    "equeligible": 34,
+    "matched": 34
+  },
+  "complete": true,
+  "complete_ts": "2026-10-16T20:21:57Z"
+}
