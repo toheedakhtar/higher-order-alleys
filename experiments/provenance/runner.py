@@ -227,9 +227,10 @@ def build_item(model, tok, op, item_idx, cfg, layers):
 
 
 def condition_scores(model, op, readout, rec, ctx, layers, U=None, v=None):
-    """Returns (scores, hstore): scores are lists (calib) or floats (holdout);
-    hstore is {name: raw readout residual} when U is provided (calib)."""
-    ids_judge, ans_pos = ctx["ids_judge"], ctx["ans_pos"]
+    """Returns (scores, hstore): scores are lists (calib) or floats (holdout).
+    hstore (calib only) keeps the FULL readout-layer residual [T, D] per
+    condition so per-position engagement can be audited."""
+    ids_judge, ans_pos, rp = ctx["ids_judge"], ctx["ans_pos"], ctx["readout_pos"]
     out, hstore = {}, {}
     for name, blk, scl in (
         ("clean", None, None),
@@ -237,14 +238,19 @@ def condition_scores(model, op, readout, rec, ctx, layers, U=None, v=None):
         ("planted_b", layers["op_b"], rec["op_b"]["scale"]),
         ("random", tuple(rec["op_m"]["layers"]), rec["op_m"]["scale"]),
     ):
-        h = probe_scoped(model, ids_judge, readout, op, scl, ans_pos if blk is not None else None,
-                         blk if blk is not None else None)
+        if blk is not None:
+            op.scope(scl, ans_pos, tuple(blk))
+        try:
+            _ = model(torch.tensor([ids_judge], device=model.device))
+        finally:
+            op.clear()
+        t = readout.h[0].detach().clone()          # [T, D]
         if U is not None:
-            hstore[name] = h.detach().clone()
-            out[name] = [round(x, 5) for x in (h @ U.T).tolist()]
+            hstore[name] = t
+            out[name] = [round(x, 5) for x in (t[rp] @ U.T).tolist()]
         else:
-            out[name] = float(torch.dot(v.to(h.dtype).to(h.device), h))
-    return out, hstore
+            out[name] = float(torch.dot(v.to(t.dtype).to(t.device), t[rp]))
+    return out, (hstore if U is not None else None)
 
 
 # ---------------------------------------------------------------------------
@@ -268,10 +274,15 @@ def run_calib(model, tok, op, readout, cfg, layers, run_dir, limit):
             l2_planted_clean_rel=round(float((hh["planted_a"] - hh["clean"]).norm() / max(hh["clean"].norm(), 1e-9)), 6),
             l2_planted_random_rel=round(float((hh["planted_a"] - hh["random"]).norm() / max(hh["random"].norm(), 1e-9)), 6),
         )
+        ia = torch.tensor(ctx["ans_pos"], dtype=torch.long)
+        hc, hp = hh["clean"], hh["planted_a"]
+        rec["diag"]["l2_ansspan_rel"] = round(float((hp[ia] - hc[ia]).norm() / max(hc[ia].norm(), 1e-9)), 6)
+        rec["diag"]["readout_pos"] = ctx["readout_pos"]
         engagement.append(rec["diag"]["l2_planted_clean_rel"])
         records.append(rec)
         print(f"calib {idx}: eligible, sep_mean={float(diff.mean()):.4f} "
-              f"sep_max={float(diff.abs().max()):.4f} engage={rec['diag']['l2_planted_clean_rel']:.4f}")
+              f"sep_max={float(diff.abs().max()):.4f} engage={rec['diag']['l2_planted_clean_rel']:.4f} "
+              f"ansspan={rec['diag']['l2_ansspan_rel']:.4f}")
 
     eligible = [r for r in records if r.get("eligible")]
     gates = dict(dtype_fp32=model.dtype is torch.float32,
